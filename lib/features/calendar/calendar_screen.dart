@@ -1,0 +1,460 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:keystone/models/note.dart';
+import 'package:keystone/models/journal_entry.dart';
+import 'package:keystone/models/task.dart';
+import 'package:keystone/providers/journal_provider.dart';
+import 'package:keystone/providers/note_provider.dart';
+import 'package:keystone/providers/task_provider.dart';
+import 'package:table_calendar/table_calendar.dart';
+
+class CalendarScreen extends ConsumerStatefulWidget {
+  const CalendarScreen({super.key});
+
+  @override
+  ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends ConsumerState<CalendarScreen> {
+  DateTime _selectedDay = DateTime.now();
+  DateTime _focusedDay = DateTime.now();
+
+  Map<String, List<dynamic>> _getGroupedEventsForDay(DateTime day) {
+    final tasks = ref.read(taskListProvider);
+    final notes = ref.read(noteListProvider);
+    final journalEntries = ref.read(journalEntryListProvider);
+
+    final dayTasks = tasks
+        .where((task) => isSameDay(task.dueDate, day))
+        .toList();
+    final dayNotes = notes
+        .where((note) => isSameDay(note.creationDate, day))
+        .toList();
+    final dayJournalEntries = journalEntries
+        .where((entry) => isSameDay(entry.creationDate, day))
+        .toList();
+
+    return {
+      'Tasks': dayTasks,
+      'Notes': dayNotes,
+      'Journal Entries': dayJournalEntries,
+    };
+  }
+
+  List<dynamic> _getEventsForDay(DateTime day) {
+    final groupedEvents = _getGroupedEventsForDay(day);
+    return groupedEvents.values.expand((list) => list).toList();
+  }
+
+  Widget _buildTaskItem(BuildContext context, WidgetRef ref, Task task) {
+    Widget leading;
+    TextStyle? titleStyle;
+    bool isInteractive = true;
+
+    switch (task.status) {
+      case 'done':
+        if (task.category == 'event') {
+          leading = const Icon(Icons.add, color: Colors.grey);
+        } else {
+          leading = const Icon(Icons.clear, color: Colors.grey);
+        }
+        titleStyle = const TextStyle(
+          decoration: TextDecoration.lineThrough,
+          color: Colors.grey,
+        );
+        break;
+      case 'migrated':
+        leading = const Icon(Icons.chevron_right, color: Colors.grey);
+        titleStyle = const TextStyle(
+          decoration: TextDecoration.lineThrough,
+          color: Colors.grey,
+        );
+        isInteractive = false;
+        break;
+      case 'canceled':
+        leading = const Text(
+          '/',
+          style: TextStyle(fontSize: 24, color: Colors.grey),
+        );
+        titleStyle = const TextStyle(
+          decoration: TextDecoration.lineThrough,
+          color: Colors.grey,
+        );
+        isInteractive = false;
+        break;
+      case 'pending':
+      default:
+        if (task.category == 'event') {
+          leading = Icon(
+            Icons.remove,
+            color: Theme.of(context).colorScheme.primary,
+          );
+        } else {
+          leading = Icon(
+            Icons.circle,
+            size: 12,
+            color: Theme.of(context).colorScheme.primary,
+          );
+        }
+        break;
+    }
+
+    return ListTile(
+      leading: Padding(
+        padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+        child: leading,
+      ),
+      title: Text(task.text, style: titleStyle),
+      onTap: isInteractive
+          ? () {
+              ref.read(taskListProvider.notifier).toggleTaskStatus(task);
+            }
+          : null,
+      onLongPress: () {
+        _showTaskContextMenu(context, ref, task);
+      },
+    );
+  }
+
+  void _showTaskContextMenu(BuildContext context, WidgetRef ref, Task task) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddTaskDialog(context, ref, task: task);
+                },
+              ),
+              // Show Migrate only for pending tasks
+              if (task.status == 'pending')
+                ListTile(
+                  leading: const Icon(Icons.chevron_right),
+                  title: const Text('Migrate'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showMigrateDialog(context, ref, task);
+                  },
+                ),
+              // Show Cancel only for pending tasks
+              if (task.status == 'pending')
+                ListTile(
+                  leading: const Icon(Icons.block),
+                  title: const Text('Cancel'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    ref.read(taskListProvider.notifier).cancelTask(task);
+                  },
+                ),
+              // Show Undo Cancel only for canceled tasks
+              if (task.status == 'canceled')
+                ListTile(
+                  leading: const Icon(Icons.undo),
+                  title: const Text('Undo Cancel'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    ref.read(taskListProvider.notifier).uncancelTask(task);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Delete'),
+                onTap: () {
+                  Navigator.pop(context);
+                  ref.read(taskListProvider.notifier).deleteTask(task);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMigrateDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+  ) async {
+    final newDate = await showDatePicker(
+      context: context,
+      initialDate: task.dueDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (newDate != null) {
+      ref.read(taskListProvider.notifier).migrateTask(task, newDate);
+    }
+  }
+
+  void _showAddTaskDialog(BuildContext context, WidgetRef ref, {Task? task}) {
+    final TextEditingController controller = TextEditingController(
+      text: task?.text,
+    );
+    final TextEditingController tagsController = TextEditingController(
+      text: task?.tags.join(' '),
+    );
+    final TextEditingController noteController = TextEditingController(
+      text: task?.note,
+    );
+    DateTime? dueDate = task?.dueDate ?? DateTime.now();
+    String category = task?.category ?? 'task'; // Default to 'task'
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: AlertDialog(
+                  title: Text(task == null ? 'Add Item' : 'Edit Item'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'task', label: Text('Task')),
+                            ButtonSegment(value: 'event', label: Text('Event')),
+                          ],
+                          selected: {category},
+                          onSelectionChanged: (Set<String> newSelection) {
+                            setState(() {
+                              category = newSelection.first;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(
+                            labelText: 'Task',
+                            border: OutlineInputBorder(),
+                          ),
+                          autofocus: true,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: tagsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Tags (e.g. #work #home)',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: noteController,
+                          decoration: const InputDecoration(
+                            labelText: 'Note',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const Text('Due Date: '),
+                            TextButton(
+                              onPressed: () async {
+                                final selectedDate = await showDatePicker(
+                                  context: context,
+                                  initialDate: dueDate ?? DateTime.now(),
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2030),
+                                );
+                                if (selectedDate != null) {
+                                  setState(() {
+                                    dueDate = selectedDate;
+                                  });
+                                }
+                              },
+                              child: Text(
+                                dueDate != null
+                                    ? DateFormat.yMMMd().format(dueDate!)
+                                    : 'Select Date',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        if (controller.text.isNotEmpty && dueDate != null) {
+                          if (task == null) {
+                            ref.read(taskListProvider.notifier).addTask(
+                                  controller.text,
+                                  tags: tagsController.text,
+                                  dueDate: dueDate,
+                                  category: category,
+                                  note: noteController.text.isEmpty
+                                      ? null
+                                      : noteController.text,
+                                );
+                          } else {
+                            ref.read(taskListProvider.notifier).updateTask(
+                                  task,
+                                  controller.text,
+                                  tagsController.text,
+                                  dueDate: dueDate,
+                                  category: category,
+                                  note: noteController.text.isEmpty
+                                      ? null
+                                      : noteController.text,
+                                );
+                          }
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: Text(task == null ? 'Add' : 'Save'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allTasks = ref.watch(taskListProvider);
+    final groupedEvents = _getGroupedEventsForDay(_selectedDay);
+    final List<Widget> eventWidgets = [];
+
+    groupedEvents.forEach((header, events) {
+      if (events.isNotEmpty) {
+        eventWidgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
+            child: Text(
+              header,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        );
+        for (final event in events) {
+          if (event is Task) {
+            eventWidgets.add(_buildTaskItem(context, ref, event));
+          } else if (event is Note) {
+            eventWidgets.add(
+              ListTile(
+                title: Text(event.optionalTitle ?? 'Note'),
+                subtitle: Text(
+                  event.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            );
+          } else if (event is JournalEntry) {
+            eventWidgets.add(
+              ListTile(
+                title: Text(DateFormat.yMMMd().format(event.creationDate)),
+                subtitle: Text(
+                  event.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    });
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Calendar')),
+      body: Column(
+        children: [
+          TableCalendar(
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            eventLoader: _getEventsForDay,
+            headerVisible: true,
+            daysOfWeekHeight: 40,
+            calendarBuilders: CalendarBuilders(
+              markerBuilder: (context, day, events) {
+                if (events.isNotEmpty) {
+                  return Positioned(
+                    right: 1,
+                    bottom: 1,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                  );
+                }
+                return null;
+              },
+              defaultBuilder: (context, day, focusedDay) {
+                final now = DateTime.now();
+                final isPast = day.isBefore(
+                  DateTime(now.year, now.month, now.day),
+                );
+                final hasPending = allTasks.any(
+                  (task) =>
+                      isSameDay(task.dueDate, day) && task.status == 'pending',
+                );
+
+                if (isPast && hasPending) {
+                  return Container(
+                    margin: const EdgeInsets.all(4.0),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${day.day}',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  );
+                }
+                return null;
+              },
+            ),
+            selectedDayPredicate: (day) {
+              return isSameDay(_selectedDay, day);
+            },
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+            },
+          ),
+          const SizedBox(height: 8.0),
+          Expanded(child: ListView(children: eventWidgets)),
+        ],
+      ),
+    );
+  }
+}
