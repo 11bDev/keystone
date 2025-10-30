@@ -29,12 +29,19 @@ class SyncService implements SyncServiceInterface {
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
   
+  // Constructor now attempts to restore session
+  SyncService() {
+    _initializeIfNeeded();
+  }
+  
   /// Get the calendar service instance
   GoogleCalendarService get calendarService => _calendarService;
 
   /// Initialize and restore previous sign-in session if available
   Future<void> _initializeIfNeeded() async {
     if (_initialized) return;
+    
+    _initialized = true; // Set immediately to prevent duplicate calls
     
     try {
       // Try to restore previous sign-in silently
@@ -50,12 +57,12 @@ class SyncService implements SyncServiceInterface {
           _calendarService.initialize(_authenticatedClient);
           print('Drive API re-initialized from saved session');
         }
+      } else {
+        print('No previous Google sign-in session found');
       }
     } catch (error) {
       print('Could not restore previous session: $error');
     }
-    
-    _initialized = true;
   }
 
   /// Initialize and sign in to Google using native Google Sign-In
@@ -79,6 +86,7 @@ class SyncService implements SyncServiceInterface {
       _authenticatedClient = _GoogleAuthClient(accessToken, auth);
       _driveApi = drive.DriveApi(_authenticatedClient!);
       _calendarService.initialize(_authenticatedClient);
+      _initialized = true;
 
       print('Successfully signed in to Google Drive!');
       return true;
@@ -104,10 +112,6 @@ class SyncService implements SyncServiceInterface {
   /// Check if user is signed in
   @override
   bool get isSignedIn {
-    // Try to restore session if not initialized
-    if (!_initialized) {
-      _initializeIfNeeded();
-    }
     return _googleSignIn.currentUser != null;
   }
 

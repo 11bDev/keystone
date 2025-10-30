@@ -6,6 +6,7 @@ import 'package:keystone/providers/note_provider.dart';
 import 'package:keystone/providers/journal_provider.dart';
 import 'package:keystone/providers/theme_provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -17,11 +18,22 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isSyncing = false;
   DateTime? _lastBackupTime;
+  String _version = 'Loading...';
 
   @override
   void initState() {
     super.initState();
     _loadBackupTime();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _version = '${packageInfo.version}+${packageInfo.buildNumber}';
+      });
+    }
   }
 
   Future<void> _loadBackupTime() async {
@@ -572,6 +584,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             ),
             const Divider(),
+            // Sync log viewer
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Sync Log'),
+              subtitle: const Text('View recent sync activity (last 24 hours)'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SyncLogScreen(),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
             ListTile(
               enabled: !_isSyncing,
               leading: _isSyncing
@@ -607,7 +635,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ),
-          const ListTile(title: Text('Version'), subtitle: Text('1.0.0')),
+          ListTile(
+            title: const Text('Version'),
+            subtitle: Text(_version),
+          ),
         ],
       ),
     );
@@ -628,5 +659,105 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } else {
       return '${dateTime.month}/${dateTime.day}/${dateTime.year}';
     }
+  }
+}
+
+// Sync Log Screen
+class SyncLogScreen extends ConsumerWidget {
+  const SyncLogScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncLog = ref.watch(syncLogProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Sync Log'),
+      ),
+      body: syncLog.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.history,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No sync activity yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Sync logs will appear here',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              itemCount: syncLog.length,
+              itemBuilder: (context, index) {
+                final entry = syncLog[index];
+                return ListTile(
+                  leading: Icon(
+                    entry.success ? Icons.check_circle : Icons.error,
+                    color: entry.success ? Colors.green : Colors.red,
+                  ),
+                  title: Text(entry.displayType),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_formatLogTime(entry.timestamp)),
+                      if (!entry.success && entry.errorMessage != null)
+                        Text(
+                          entry.errorMessage!,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 12,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                  trailing: Text(
+                    _formatLogTimestamp(entry.timestamp),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  String _formatLogTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
+  String _formatLogTimestamp(DateTime dateTime) {
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

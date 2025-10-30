@@ -29,7 +29,7 @@ class NoteListNotifier extends StateNotifier<List<Note>> {
 
   Future<void> _triggerAutoSync() async {
     try {
-      await _ref.read(syncNotifierProvider.notifier).autoSync();
+      await _ref.read(syncNotifierProvider.notifier).changeSync();
     } catch (e) {
       // Silently fail - auto-sync is best-effort
     }

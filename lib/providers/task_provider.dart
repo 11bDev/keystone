@@ -27,7 +27,7 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
 
   Future<void> _triggerAutoSync() async {
     try {
-      await _ref.read(syncNotifierProvider.notifier).autoSync();
+      await _ref.read(syncNotifierProvider.notifier).changeSync();
     } catch (e) {
       // Silently fail - auto-sync is best-effort
     }

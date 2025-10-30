@@ -17,6 +17,9 @@ migrate_working_dir/
 *.env
 !.env.example
 
+# Google OAuth credentials
+lib/config/google_credentials.dart
+
 # IntelliJ related
 *.iml
 *.ipr

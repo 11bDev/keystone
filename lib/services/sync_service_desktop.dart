@@ -10,19 +10,17 @@ import 'package:keystone/models/note.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:keystone/services/sync_service_interface.dart';
 import 'package:keystone/services/google_calendar_service.dart';
+import 'package:keystone/config/google_credentials.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Desktop-compatible Google Drive sync using OAuth 2.0
 class SyncService implements SyncServiceInterface {
-  // OAuth 2.0 credentials from Google Cloud Console
-  // Set via environment variables: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
-  static const String _clientId =
-      String.fromEnvironment('GOOGLE_CLIENT_ID', defaultValue: 'YOUR_CLIENT_ID.apps.googleusercontent.com');
-  static const String _clientSecret = 
-      String.fromEnvironment('GOOGLE_CLIENT_SECRET', defaultValue: 'YOUR_CLIENT_SECRET');
-
-  static final ClientId _credentials = ClientId(_clientId, _clientSecret);
+  // OAuth 2.0 credentials from lib/config/google_credentials.dart
+  static final ClientId _credentials = ClientId(
+    GoogleCredentials.desktopClientId,
+    GoogleCredentials.desktopClientSecret,
+  );
   static final List<String> _scopes = [
     drive.DriveApi.driveFileScope,
     calendar.CalendarApi.calendarScope,
