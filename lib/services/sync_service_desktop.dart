@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -8,27 +9,36 @@ import 'package:keystone/models/task.dart';
 import 'package:keystone/models/note.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:keystone/services/sync_service_interface.dart';
+import 'package:keystone/services/google_calendar_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Desktop-compatible Google Drive sync using OAuth 2.0
 class SyncService implements SyncServiceInterface {
   // OAuth 2.0 credentials from Google Cloud Console
-  // IMPORTANT: Replace these with your own credentials from Google Cloud Console
-  // See GOOGLE_DRIVE_SETUP.md for instructions
+  // Set via environment variables: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
   static const String _clientId =
-      'YOUR_CLIENT_ID.apps.googleusercontent.com';
-  static const String _clientSecret = 'YOUR_CLIENT_SECRET';
+      String.fromEnvironment('GOOGLE_CLIENT_ID', defaultValue: 'YOUR_CLIENT_ID.apps.googleusercontent.com');
+  static const String _clientSecret = 
+      String.fromEnvironment('GOOGLE_CLIENT_SECRET', defaultValue: 'YOUR_CLIENT_SECRET');
 
   static final ClientId _credentials = ClientId(_clientId, _clientSecret);
-  static final List<String> _scopes = [drive.DriveApi.driveFileScope];
+  static final List<String> _scopes = [
+    drive.DriveApi.driveFileScope,
+    calendar.CalendarApi.calendarScope,
+  ];
 
   AccessCredentials? _accessCredentials;
   drive.DriveApi? _driveApi;
   http.Client? _authenticatedClient;
+  final GoogleCalendarService _calendarService = GoogleCalendarService();
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
+  
+  /// Get the calendar service instance
+  @override
+  GoogleCalendarService get calendarService => _calendarService;
 
   /// Initialize and sign in to Google using OAuth 2.0 desktop flow
   Future<bool> signIn() async {
@@ -48,6 +58,9 @@ class SyncService implements SyncServiceInterface {
 
       // Initialize Drive API
       _driveApi = drive.DriveApi(_authenticatedClient!);
+      
+      // Initialize Calendar service
+      _calendarService.initialize(_authenticatedClient);
 
       print('Successfully signed in to Google Drive!');
       return true;
@@ -233,23 +246,26 @@ class SyncService implements SyncServiceInterface {
         spaces: 'drive',
       );
 
-      final file = drive.File()
-        ..name = _backupFileName
-        ..parents = [folderId];
-
       final media = drive.Media(Stream.value(bytes), bytes.length);
 
       if (existingFiles.files != null && existingFiles.files!.isNotEmpty) {
-        // Update existing file
+        // Update existing file - don't set parents in update requests
+        final updateFile = drive.File()
+          ..name = _backupFileName;
+        
         await _driveApi!.files.update(
-          file,
+          updateFile,
           existingFiles.files!.first.id!,
           uploadMedia: media,
         );
         print('Updated existing backup in Google Drive');
       } else {
-        // Create new file
-        await _driveApi!.files.create(file, uploadMedia: media);
+        // Create new file - parents can only be set during creation
+        final createFile = drive.File()
+          ..name = _backupFileName
+          ..parents = [folderId];
+        
+        await _driveApi!.files.create(createFile, uploadMedia: media);
         print('Created new backup in Google Drive');
       }
 

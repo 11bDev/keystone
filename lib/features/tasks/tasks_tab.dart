@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:keystone/models/task.dart';
 import 'package:keystone/providers/task_provider.dart';
+import 'package:keystone/providers/sync_provider.dart';
 
 class TasksTab extends ConsumerStatefulWidget {
   const TasksTab({super.key});
@@ -298,33 +300,77 @@ class _TasksTabState extends ConsumerState<TasksTab> {
       return const Center(child: Text('No upcoming tasks.'));
     }
 
-    final Map<DateTime, List<Task>> groupedTasks = {};
+    // Group by month, then by date within each month
+    final Map<DateTime, Map<DateTime, List<Task>>> groupedByMonthAndDate = {};
     for (final task in futureTasks) {
       final month = DateTime(task.dueDate.year, task.dueDate.month);
-      if (groupedTasks[month] == null) {
-        groupedTasks[month] = [];
+      final date = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+      
+      if (groupedByMonthAndDate[month] == null) {
+        groupedByMonthAndDate[month] = {};
       }
-      groupedTasks[month]!.add(task);
+      if (groupedByMonthAndDate[month]![date] == null) {
+        groupedByMonthAndDate[month]![date] = [];
+      }
+      groupedByMonthAndDate[month]![date]!.add(task);
     }
 
-    final sortedMonths = groupedTasks.keys.toList()..sort();
+    final sortedMonths = groupedByMonthAndDate.keys.toList()..sort();
 
     return ListView.builder(
       itemCount: sortedMonths.length,
       itemBuilder: (context, index) {
         final month = sortedMonths[index];
-        final monthTasks = groupedTasks[month]!;
+        final dateGroups = groupedByMonthAndDate[month]!;
+        final sortedDates = dateGroups.keys.toList()..sort();
+        
         return ExpansionTile(
           title: Text(
             '${_getMonthName(month.month)} ${month.year}',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          children: monthTasks
-              .map((task) => _buildTaskItem(context, ref, task))
-              .toList(),
+          children: sortedDates.expand((date) {
+            final dateTasks = dateGroups[date]!;
+            // Format: "Monday the 21st"
+            final dayOfWeek = DateFormat('EEEE').format(date); // Full day name
+            final dayNumber = date.day;
+            final suffix = _getDaySuffix(dayNumber);
+            final dateLabel = '$dayOfWeek the $dayNumber$suffix';
+            
+            return [
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0, top: 8.0, bottom: 4.0),
+                child: Text(
+                  dateLabel,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                  ),
+                ),
+              ),
+              ...dateTasks.map((task) => _buildTaskItem(context, ref, task)),
+            ];
+          }).toList(),
         );
       },
     );
+  }
+  
+  String _getDaySuffix(int day) {
+    if (day >= 11 && day <= 13) {
+      return 'th';
+    }
+    switch (day % 10) {
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
+    }
   }
 
   String _getMonthName(int month) {
@@ -591,12 +637,17 @@ class _TasksTabState extends ConsumerState<TasksTab> {
     );
     DateTime? dueDate = task?.dueDate ?? DateTime.now();
     String category = task?.category ?? 'task'; // Default to 'task'
+    bool addToGoogleCalendar = false; // Default: don't add to Google Calendar
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            final syncService = ref.read(syncServiceProvider);
+            final isSignedIn = syncService.isSignedIn;
+            final showGoogleCalendarOption = category == 'event' && isSignedIn;
+            
             return Dialog(
               insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               child: Container(
@@ -625,6 +676,10 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                               onSelectionChanged: (newSelection) {
                                 setState(() {
                                   category = newSelection.first;
+                                  // Reset checkbox if switching away from event
+                                  if (category != 'event') {
+                                    addToGoogleCalendar = false;
+                                  }
                                 });
                               },
                             ),
@@ -692,6 +747,20 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                 ),
                               ],
                             ),
+                            if (showGoogleCalendarOption) ...[
+                              const SizedBox(height: 16),
+                              CheckboxListTile(
+                                title: const Text('Add to Google Calendar'),
+                                subtitle: const Text('Sync this event to your Google Calendar'),
+                                value: addToGoogleCalendar,
+                                onChanged: (value) {
+                                  setState(() {
+                                    addToGoogleCalendar = value ?? false;
+                                  });
+                                },
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -706,21 +775,48 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: () {
+                          onPressed: () async {
                             if (controller.text.isNotEmpty) {
                               if (task == null) {
-                                ref
-                                    .read(taskListProvider.notifier)
-                                    .addTask(
-                                      controller.text,
-                                      tags: tagsController.text,
-                                      dueDate: dueDate,
-                                      category: category,
-                                      note: noteController.text.isEmpty
-                                          ? null
-                                          : noteController.text,
+                                // Adding new task
+                                final newTask = Task()
+                                  ..text = controller.text
+                                  ..tags = tagsController.text
+                                      .split(' ')
+                                      .where((tag) => tag.isNotEmpty)
+                                      .toList()
+                                  ..dueDate = dueDate!
+                                  ..category = category
+                                  ..note = noteController.text.isEmpty
+                                      ? null
+                                      : noteController.text;
+                                
+                                // Add to Google Calendar if requested
+                                if (addToGoogleCalendar && category == 'event') {
+                                  final calendarService = syncService.calendarService;
+                                  final eventId = await calendarService.addEventToCalendar(newTask);
+                                  if (eventId != null) {
+                                    newTask.googleCalendarEventId = eventId;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Event added to Google Calendar'),
+                                        duration: Duration(seconds: 2),
+                                      ),
                                     );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Failed to add to Google Calendar'),
+                                        backgroundColor: Colors.orange,
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                }
+                                
+                                ref.read(taskListProvider.notifier).addTaskObject(newTask);
                               } else {
+                                // Updating existing task
                                 ref
                                     .read(taskListProvider.notifier)
                                     .updateTask(
@@ -733,6 +829,15 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                           ? null
                                           : noteController.text,
                                     );
+                                
+                                // Update in Google Calendar if it was synced
+                                if (task.googleCalendarEventId != null && category == 'event') {
+                                  final calendarService = syncService.calendarService;
+                                  await calendarService.updateEventInCalendar(
+                                    task.googleCalendarEventId!,
+                                    task,
+                                  );
+                                }
                               }
                               Navigator.pop(context);
                             }

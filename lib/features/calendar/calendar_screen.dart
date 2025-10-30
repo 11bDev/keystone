@@ -19,6 +19,13 @@ class CalendarScreen extends ConsumerStatefulWidget {
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   DateTime _selectedDay = DateTime.now();
   DateTime _focusedDay = DateTime.now();
+  
+  // Track expanded state for each category
+  final Map<String, bool> _expandedCategories = {
+    'Tasks': true,
+    'Notes': true,
+    'Journal Entries': true,
+  };
 
   Map<String, List<dynamic>> _getGroupedEventsForDay(DateTime day) {
     final tasks = ref.read(taskListProvider);
@@ -342,23 +349,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     groupedEvents.forEach((header, events) {
       if (events.isNotEmpty) {
-        eventWidgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: Text(
-              header,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-        );
+        final categoryEvents = <Widget>[];
+        
         for (final event in events) {
           if (event is Task) {
-            eventWidgets.add(_buildTaskItem(context, ref, event));
+            categoryEvents.add(_buildTaskItem(context, ref, event));
           } else if (event is Note) {
-            eventWidgets.add(
+            categoryEvents.add(
               ListTile(
                 title: Text(event.optionalTitle ?? 'Note'),
                 subtitle: Text(
@@ -369,7 +366,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               ),
             );
           } else if (event is JournalEntry) {
-            eventWidgets.add(
+            categoryEvents.add(
               ListTile(
                 title: Text(DateFormat.yMMMd().format(event.creationDate)),
                 subtitle: Text(
@@ -381,79 +378,160 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             );
           }
         }
+        
+        eventWidgets.add(
+          ExpansionTile(
+            initiallyExpanded: _expandedCategories[header] ?? true,
+            onExpansionChanged: (expanded) {
+              setState(() {
+                _expandedCategories[header] = expanded;
+              });
+            },
+            title: Text(
+              '$header (${events.length})',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            children: categoryEvents,
+          ),
+        );
       }
     });
 
+    // Build the calendar widget
+    final calendarWidget = Container(
+      constraints: const BoxConstraints(maxWidth: 500),
+      child: TableCalendar(
+        firstDay: DateTime.utc(2020, 1, 1),
+        lastDay: DateTime.utc(2030, 12, 31),
+        focusedDay: _focusedDay,
+        eventLoader: _getEventsForDay,
+        headerVisible: true,
+        daysOfWeekHeight: 40,
+        calendarBuilders: CalendarBuilders(
+          markerBuilder: (context, day, events) {
+            if (events.isNotEmpty) {
+              return Positioned(
+                right: 1,
+                bottom: 1,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+              );
+            }
+            return null;
+          },
+          defaultBuilder: (context, day, focusedDay) {
+            final now = DateTime.now();
+            final isPast = day.isBefore(
+              DateTime(now.year, now.month, now.day),
+            );
+            final hasPending = allTasks.any(
+              (task) =>
+                  isSameDay(task.dueDate, day) && task.status == 'pending',
+            );
+
+            if (isPast && hasPending) {
+              return Container(
+                margin: const EdgeInsets.all(4.0),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.3),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${day.day}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              );
+            }
+            return null;
+          },
+        ),
+        selectedDayPredicate: (day) {
+          return isSameDay(_selectedDay, day);
+        },
+        onDaySelected: (selectedDay, focusedDay) {
+          setState(() {
+            _selectedDay = selectedDay;
+            _focusedDay = focusedDay;
+          });
+        },
+      ),
+    );
+
+    // Build the events list widget
+    final eventsListWidget = eventWidgets.isEmpty
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                'No items for ${DateFormat.yMMMd().format(_selectedDay)}',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+              ),
+            ),
+          )
+        : ListView(children: eventWidgets);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Calendar')),
-      body: Column(
-        children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            eventLoader: _getEventsForDay,
-            headerVisible: true,
-            daysOfWeekHeight: 40,
-            calendarBuilders: CalendarBuilders(
-              markerBuilder: (context, day, events) {
-                if (events.isNotEmpty) {
-                  return Positioned(
-                    right: 1,
-                    bottom: 1,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Theme.of(context).primaryColor,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Use side-by-side layout for wider screens (desktop/tablet)
+          if (constraints.maxWidth > 800) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Calendar on the left
+                Expanded(
+                  flex: 2,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Center(child: calendarWidget),
+                    ),
+                  ),
+                ),
+                // Vertical divider
+                const VerticalDivider(width: 1),
+                // Events on the right
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          DateFormat.yMMMd().format(_selectedDay),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
                       ),
-                    ),
-                  );
-                }
-                return null;
-              },
-              defaultBuilder: (context, day, focusedDay) {
-                final now = DateTime.now();
-                final isPast = day.isBefore(
-                  DateTime(now.year, now.month, now.day),
-                );
-                final hasPending = allTasks.any(
-                  (task) =>
-                      isSameDay(task.dueDate, day) && task.status == 'pending',
-                );
-
-                if (isPast && hasPending) {
-                  return Container(
-                    margin: const EdgeInsets.all(4.0),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.3),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${day.day}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  );
-                }
-                return null;
-              },
-            ),
-            selectedDayPredicate: (day) {
-              return isSameDay(_selectedDay, day);
-            },
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
-            },
-          ),
-          const SizedBox(height: 8.0),
-          Expanded(child: ListView(children: eventWidgets)),
-        ],
+                      const Divider(height: 1),
+                      Expanded(child: eventsListWidget),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // Use vertical layout for narrow screens (mobile)
+            return Column(
+              children: [
+                calendarWidget,
+                const SizedBox(height: 8.0),
+                Expanded(child: eventsListWidget),
+              ],
+            );
+          }
+        },
       ),
     );
   }

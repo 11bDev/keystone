@@ -36,8 +36,7 @@ class NotesTab extends ConsumerWidget {
               ],
             ),
             onTap: () => _showNoteDialog(context, ref, note: note),
-            onLongPress: () =>
-                ref.read(noteListProvider.notifier).deleteNote(note),
+            onLongPress: () => _showNoteContextMenu(context, ref, note),
           );
         },
       ),
@@ -45,6 +44,57 @@ class NotesTab extends ConsumerWidget {
         onPressed: () => _showNoteDialog(context, ref),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+
+  void _showNoteContextMenu(BuildContext context, WidgetRef ref, Note note) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showNoteDialog(context, ref, note: note);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Note'),
+                      content: const Text('Are you sure you want to delete this note?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (confirm == true) {
+                    ref.read(noteListProvider.notifier).deleteNote(note);
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

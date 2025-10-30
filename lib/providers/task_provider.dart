@@ -52,6 +52,13 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
     state = [...state, task];
     await _triggerAutoSync();
   }
+  
+  /// Add a pre-constructed Task object (useful for adding tasks with additional fields)
+  void addTaskObject(Task task) async {
+    await _box.add(task);
+    state = [...state, task];
+    await _triggerAutoSync();
+  }
 
   void toggleTaskStatus(Task task) async {
     task.status = task.status == 'pending' ? 'done' : 'pending';
@@ -81,6 +88,24 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
     }
     task.note = note;
     await task.save();
+    
+    // If the task has a Google Calendar event, update it
+    if (task.googleCalendarEventId != null && task.category == 'event') {
+      try {
+        final syncService = _ref.read(syncServiceProvider);
+        if (syncService.isSignedIn) {
+          await syncService.calendarService.updateEventInCalendar(
+            task.googleCalendarEventId!,
+            task,
+          );
+          print('Updated Google Calendar event');
+        }
+      } catch (e) {
+        print('Failed to update Google Calendar event: $e');
+        // Continue with local update even if calendar update fails
+      }
+    }
+    
     state = [
       for (final t in state)
         if (t.key == task.key) task else t,
@@ -95,7 +120,31 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
       ..dueDate = newDueDate
       ..tags = task.tags
       ..category = task.category
+      ..note = task.note
       ..status = 'pending';
+
+    // If the task has a Google Calendar event, update it with the new date
+    if (task.googleCalendarEventId != null) {
+      try {
+        final syncService = _ref.read(syncServiceProvider);
+        if (syncService.isSignedIn && task.category == 'event') {
+          // Update the event in Google Calendar with new date
+          final success = await syncService.calendarService.updateEventInCalendar(
+            task.googleCalendarEventId!,
+            newTask,
+          );
+          
+          if (success) {
+            // Copy the calendar event ID to the new task
+            newTask.googleCalendarEventId = task.googleCalendarEventId;
+            print('Updated Google Calendar event with new date');
+          }
+        }
+      } catch (e) {
+        print('Failed to update Google Calendar event during migration: $e');
+        // Continue with migration even if calendar update fails
+      }
+    }
 
     // Update the original task's status to 'migrated'
     task.status = 'migrated';
@@ -129,6 +178,21 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
   }
 
   void deleteTask(Task task) async {
+    // Delete from Google Calendar if it was synced
+    if (task.googleCalendarEventId != null) {
+      try {
+        final syncService = _ref.read(syncServiceProvider);
+        if (syncService.isSignedIn) {
+          await syncService.calendarService.deleteEventFromCalendar(
+            task.googleCalendarEventId!,
+          );
+        }
+      } catch (e) {
+        print('Failed to delete event from Google Calendar: $e');
+        // Continue with local deletion even if calendar deletion fails
+      }
+    }
+    
     await task.delete();
     state = state.where((t) => t.key != task.key).toList();
     await _triggerAutoSync();

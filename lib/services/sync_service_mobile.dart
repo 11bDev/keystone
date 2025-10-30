@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:google_sign_in/google_sign_in.dart' as sign_in;
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -8,19 +9,54 @@ import 'package:keystone/models/task.dart';
 import 'package:keystone/models/note.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:keystone/services/sync_service_interface.dart';
+import 'package:keystone/services/google_calendar_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Mobile-compatible Google Drive sync using native Google Sign-In
 class SyncService implements SyncServiceInterface {
   static final sign_in.GoogleSignIn _googleSignIn = sign_in.GoogleSignIn(
-    scopes: [drive.DriveApi.driveFileScope],
+    scopes: [
+      drive.DriveApi.driveFileScope,
+      calendar.CalendarApi.calendarScope,
+    ],
   );
 
   drive.DriveApi? _driveApi;
   http.Client? _authenticatedClient;
+  bool _initialized = false;
+  final GoogleCalendarService _calendarService = GoogleCalendarService();
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
+  
+  /// Get the calendar service instance
+  GoogleCalendarService get calendarService => _calendarService;
+
+  /// Initialize and restore previous sign-in session if available
+  Future<void> _initializeIfNeeded() async {
+    if (_initialized) return;
+    
+    try {
+      // Try to restore previous sign-in silently
+      final account = await _googleSignIn.signInSilently();
+      if (account != null) {
+        print('Restored previous Google sign-in session');
+        final auth = await account.authentication;
+        final accessToken = auth.accessToken;
+        
+        if (accessToken != null) {
+          _authenticatedClient = _GoogleAuthClient(accessToken, auth);
+          _driveApi = drive.DriveApi(_authenticatedClient!);
+          _calendarService.initialize(_authenticatedClient);
+          print('Drive API re-initialized from saved session');
+        }
+      }
+    } catch (error) {
+      print('Could not restore previous session: $error');
+    }
+    
+    _initialized = true;
+  }
 
   /// Initialize and sign in to Google using native Google Sign-In
   Future<bool> signIn() async {
@@ -42,6 +78,7 @@ class SyncService implements SyncServiceInterface {
       // Create authenticated client
       _authenticatedClient = _GoogleAuthClient(accessToken, auth);
       _driveApi = drive.DriveApi(_authenticatedClient!);
+      _calendarService.initialize(_authenticatedClient);
 
       print('Successfully signed in to Google Drive!');
       return true;
@@ -60,12 +97,19 @@ class SyncService implements SyncServiceInterface {
     _authenticatedClient?.close();
     _authenticatedClient = null;
     _driveApi = null;
+    _initialized = false;
     print('Signed out from Google Drive');
   }
 
   /// Check if user is signed in
   @override
-  bool get isSignedIn => _googleSignIn.currentUser != null && _driveApi != null;
+  bool get isSignedIn {
+    // Try to restore session if not initialized
+    if (!_initialized) {
+      _initializeIfNeeded();
+    }
+    return _googleSignIn.currentUser != null;
+  }
 
   /// Get user email
   @override
@@ -209,6 +253,8 @@ class SyncService implements SyncServiceInterface {
 
   /// Upload backup to Google Drive
   Future<void> uploadBackup() async {
+    await _initializeIfNeeded();
+    
     if (!isSignedIn) {
       throw Exception('Not signed in to Google Drive');
     }
@@ -267,6 +313,8 @@ class SyncService implements SyncServiceInterface {
 
   /// Download backup from Google Drive
   Future<void> downloadBackup() async {
+    await _initializeIfNeeded();
+    
     if (!isSignedIn) {
       throw Exception('Not signed in to Google Drive');
     }
@@ -317,6 +365,8 @@ class SyncService implements SyncServiceInterface {
 
   /// Get last backup time from Google Drive
   Future<DateTime?> getLastBackupTime() async {
+    await _initializeIfNeeded();
+    
     if (!isSignedIn) return null;
 
     try {

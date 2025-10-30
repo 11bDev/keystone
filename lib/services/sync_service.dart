@@ -1,34 +1,40 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:keystone/models/task.dart';
 import 'package:keystone/models/note.dart';
 import 'package:keystone/models/journal_entry.dart';
+import 'package:keystone/services/google_calendar_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SyncService {
-  // TODO: Replace with your own OAuth 2.0 credentials from Google Cloud Console
-  // For development, you can use these placeholders, but you MUST create your own:
-  // 1. Go to https://console.cloud.google.com/
-  // 2. Create a project and enable Google Drive API
-  // 3. Create OAuth 2.0 credentials (Desktop app type)
-  // 4. Download the credentials and extract client_id and client_secret
+  // OAuth 2.0 credentials from Google Cloud Console
+  // IMPORTANT: Replace these with your own credentials from Google Cloud Console
+  // See README.md for setup instructions
   static const String _clientId = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
   static const String _clientSecret = 'YOUR_CLIENT_SECRET';
 
   static final ClientId _credentials = ClientId(_clientId, _clientSecret);
-  static final List<String> _scopes = [drive.DriveApi.driveFileScope];
+  static final List<String> _scopes = [
+    drive.DriveApi.driveFileScope,
+    calendar.CalendarApi.calendarScope,
+  ];
 
   AccessCredentials? _accessCredentials;
   drive.DriveApi? _driveApi;
   http.Client? _authenticatedClient;
+  final GoogleCalendarService _calendarService = GoogleCalendarService();
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
+  
+  /// Get the calendar service instance
+  GoogleCalendarService get calendarService => _calendarService;
 
   /// Initialize and sign in to Google using OAuth 2.0 desktop flow
   Future<bool> signIn() async {
@@ -57,6 +63,9 @@ class SyncService {
 
       // Initialize Drive API
       _driveApi = drive.DriveApi(_authenticatedClient!);
+      
+      // Initialize Calendar service
+      _calendarService.initialize(_authenticatedClient);
 
       return true;
     } catch (error) {

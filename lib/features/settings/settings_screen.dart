@@ -36,6 +36,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  /// Refresh all providers to reload data from Hive after sync
+  void _refreshAllProviders() {
+    // Reload data from Hive boxes
+    ref.read(taskListProvider.notifier).reload();
+    ref.read(noteListProvider.notifier).reload();
+    ref.read(journalEntryListProvider.notifier).reload();
+  }
+
   Future<void> _signIn() async {
     final syncService = ref.read(syncServiceProvider);
 
@@ -82,6 +90,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               if (shouldRestore == true) {
                 // Restore from backup
                 await syncService.syncFromGoogleDrive();
+                _refreshAllProviders(); // Refresh UI with restored data
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Data restored from backup as ${syncService.userEmail}')),
                 );
@@ -436,6 +445,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: const Text('Aged parchment look'),
                   secondary: const Icon(Icons.auto_stories),
                   value: AppTheme.sepia,
+                  groupValue: currentTheme,
+                  onChanged: (value) {
+                    if (value != null) {
+                      ref.read(themeProvider.notifier).setTheme(value);
+                    }
+                  },
+                ),
+                const Divider(height: 1),
+                RadioListTile<AppTheme>(
+                  title: const Text('Parchment Theme'),
+                  subtitle: const Text('Beautiful serif fonts for reading & writing'),
+                  secondary: const Icon(Icons.menu_book),
+                  value: AppTheme.parchment,
+                  groupValue: currentTheme,
+                  onChanged: (value) {
+                    if (value != null) {
+                      ref.read(themeProvider.notifier).setTheme(value);
+                    }
+                  },
+                ),
+                const Divider(height: 1),
+                RadioListTile<AppTheme>(
+                  title: const Text('Newspaper Theme'),
+                  subtitle: const Text('Classic newsprint with bold serif typography'),
+                  secondary: const Icon(Icons.article),
+                  value: AppTheme.newspaper,
                   groupValue: currentTheme,
                   onChanged: (value) {
                     if (value != null) {

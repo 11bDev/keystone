@@ -21,4 +21,7 @@ class Task extends HiveObject {
 
   @HiveField(5)
   String? note; // Optional short note for additional context
+  
+  @HiveField(6)
+  String? googleCalendarEventId; // Google Calendar event ID if synced
 }
