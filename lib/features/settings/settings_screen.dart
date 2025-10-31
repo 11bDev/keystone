@@ -5,6 +5,8 @@ import 'package:keystone/providers/task_provider.dart';
 import 'package:keystone/providers/note_provider.dart';
 import 'package:keystone/providers/journal_provider.dart';
 import 'package:keystone/providers/theme_provider.dart';
+import 'package:keystone/providers/firestore_sync_provider.dart';
+import 'package:keystone/features/projects/projects_example_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -17,13 +19,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isSyncing = false;
-  DateTime? _lastBackupTime;
+  // DateTime? _lastBackupTime; // Removed - Google Drive sync disabled
   String _version = 'Loading...';
 
   @override
   void initState() {
     super.initState();
-    _loadBackupTime();
+    // _loadBackupTime(); // Removed - Google Drive sync disabled
     _loadVersion();
   }
 
@@ -36,6 +38,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  String _formatSyncTime(DateTime syncTime) {
+    final now = DateTime.now();
+    final difference = now.difference(syncTime);
+    
+    if (difference.inSeconds < 60) {
+      return 'just now';
+    } else if (difference.inMinutes < 60) {
+      final minutes = difference.inMinutes;
+      return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'} ago';
+    } else {
+      final days = difference.inDays;
+      return '$days ${days == 1 ? 'day' : 'days'} ago';
+    }
+  }
+
+  // GOOGLE DRIVE SYNC METHODS REMOVED - Using Firebase Firestore instead
+  /*
   Future<void> _loadBackupTime() async {
     final syncService = ref.read(syncServiceProvider);
     if (syncService.isSignedIn) {
@@ -64,7 +86,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
       if (success && mounted) {
         // Enable auto-sync
-        ref.read(autoSyncEnabledProvider.notifier).state = true;
+        await ref.read(autoSyncEnabledProvider.notifier).setEnabled(true);
         
         setState(() {});
         _loadBackupTime();
@@ -207,7 +229,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await syncService.signOut();
     
     // Disable auto-sync
-    ref.read(autoSyncEnabledProvider.notifier).state = false;
+    await ref.read(autoSyncEnabledProvider.notifier).setEnabled(false);
     
     if (mounted) {
       setState(() {
@@ -403,11 +425,110 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     }
   }
+  */ // End of Google Drive sync methods
+
+  // Local file backup/restore methods (independent of cloud sync)
+  Future<void> _exportLocal() async {
+    setState(() {
+      _isSyncing = true;
+    });
+
+    try {
+      final syncService = ref.read(syncServiceProvider);
+      final filePath = await syncService.exportToLocalFile();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Exported to:\n$filePath')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importLocal() async {
+    // Pick a file
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (result == null || result.files.single.path == null) {
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import from File'),
+        content: const Text(
+          'This will replace all your current data with the data from the selected file. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() {
+      _isSyncing = true;
+    });
+
+    try {
+      final syncService = ref.read(syncServiceProvider);
+      await syncService.importFromLocalFile(result.files.single.path!);
+
+      // Refresh all providers
+      ref.read(taskListProvider.notifier).reload();
+      ref.read(noteListProvider.notifier).reload();
+      ref.read(journalEntryListProvider.notifier).reload();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Import successful')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final syncService = ref.watch(syncServiceProvider);
-    final isSignedIn = syncService.isSignedIn;
+    // final syncService = ref.watch(syncServiceProvider); // Removed - Google Drive sync disabled
+    // final isSignedIn = syncService.isSignedIn; // Removed - Google Drive sync disabled
     final currentTheme = ref.watch(themeProvider);
 
     return Scaffold(
@@ -467,7 +588,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const Divider(height: 1),
                 RadioListTile<AppTheme>(
                   title: const Text('Parchment Theme'),
-                  subtitle: const Text('Beautiful serif fonts for reading & writing'),
+                  subtitle: const Text(
+                    'Beautiful serif fonts for reading & writing',
+                  ),
                   secondary: const Icon(Icons.menu_book),
                   value: AppTheme.parchment,
                   groupValue: currentTheme,
@@ -480,7 +603,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const Divider(height: 1),
                 RadioListTile<AppTheme>(
                   title: const Text('Newspaper Theme'),
-                  subtitle: const Text('Classic newsprint with bold serif typography'),
+                  subtitle: const Text(
+                    'Classic newsprint with bold serif typography',
+                  ),
                   secondary: const Icon(Icons.article),
                   value: AppTheme.newspaper,
                   groupValue: currentTheme,
@@ -532,6 +657,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
+          // GOOGLE DRIVE SYNC DISABLED - Using Firebase Firestore instead
+          /*
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
@@ -574,13 +701,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Auto-sync'),
               subtitle: const Text('Automatically sync changes to Google Drive'),
               value: ref.watch(autoSyncEnabledProvider),
-              onChanged: (value) {
-                ref.read(autoSyncEnabledProvider.notifier).state = value;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(value ? 'Auto-sync enabled' : 'Auto-sync disabled'),
-                  ),
-                );
+              onChanged: (value) async {
+                await ref.read(autoSyncEnabledProvider.notifier).setEnabled(value);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(value ? 'Auto-sync enabled' : 'Auto-sync disabled'),
+                    ),
+                  );
+                }
               },
             ),
             const Divider(),
@@ -627,6 +756,192 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: _restore,
             ),
           ],
+          */
+          const Divider(),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Developer Tools',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+          // Sync Status Display
+          Consumer(
+            builder: (context, ref, child) {
+              final syncStatus = ref.watch(syncStatusProvider);
+              
+              IconData statusIcon;
+              Color statusColor;
+              String statusText;
+              
+              switch (syncStatus.status) {
+                  case SyncStatus.syncing:
+                    statusIcon = Icons.sync;
+                    statusColor = Colors.blue;
+                    statusText = 'Syncing...';
+                  case SyncStatus.success:
+                    statusIcon = Icons.check_circle;
+                    statusColor = Colors.green;
+                    statusText = syncStatus.lastSyncTime != null
+                        ? 'Last synced ${_formatSyncTime(syncStatus.lastSyncTime!)}'
+                        : 'Synced successfully';
+                  case SyncStatus.error:
+                    statusIcon = Icons.error;
+                    statusColor = Colors.red;
+                    statusText = syncStatus.message;
+                  case SyncStatus.idle:
+                    statusIcon = Icons.cloud_off;
+                    statusColor = Colors.grey;
+                    statusText = 'Not synced';
+                }
+                
+                return ListTile(
+                  leading: Icon(statusIcon, color: statusColor),
+                  title: const Text('Firestore Sync Status'),
+                  subtitle: Text(statusText),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.science),
+              title: const Text('Firestore Demo (Projects)'),
+              subtitle: const Text('Test Firebase Cloud Firestore sync'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProjectsExampleScreen(),
+                  ),
+                );
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload),
+            title: const Text('Sync to Firestore'),
+            subtitle: const Text('Upload all data to cloud'),
+            onTap: () async {
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final syncService = ref.read(firestoreSyncServiceProvider);
+
+              // Show loading indicator
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 16),
+                      Text('Syncing data to Firestore...'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 60),
+                ),
+              );
+
+              try {
+                await syncService.syncAllToFirestore();
+                scaffoldMessenger.hideCurrentSnackBar();
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 16),
+                        Text('Successfully synced all data to Firestore'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              } catch (e) {
+                scaffoldMessenger.hideCurrentSnackBar();
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.error, color: Colors.white),
+                        const SizedBox(width: 16),
+                        Expanded(child: Text('Sync failed: $e')),
+                      ],
+                    ),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_download),
+            title: const Text('Pull from Firestore'),
+            subtitle: const Text('Download all data from cloud'),
+            onTap: () async {
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final syncService = ref.read(firestoreSyncServiceProvider);
+
+              // Show loading indicator
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 16),
+                      Text('Pulling data from Firestore...'),
+                    ],
+                  ),
+                  duration: Duration(seconds: 60),
+                ),
+              );
+
+              try {
+                await syncService.pullAllFromFirestore();
+                
+                // Reload the providers to show the new data
+                ref.invalidate(taskListProvider);
+                ref.invalidate(noteListProvider);
+                ref.invalidate(journalEntryListProvider);
+                
+                scaffoldMessenger.hideCurrentSnackBar();
+                scaffoldMessenger.showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 16),
+                        Text('Successfully pulled all data from Firestore'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              } catch (e) {
+                scaffoldMessenger.hideCurrentSnackBar();
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.error, color: Colors.white),
+                        const SizedBox(width: 16),
+                        Expanded(child: Text('Pull failed: $e')),
+                      ],
+                    ),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              }
+            },
+          ),
           const Divider(),
           const Padding(
             padding: EdgeInsets.all(16.0),
@@ -635,15 +950,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ),
-          ListTile(
-            title: const Text('Version'),
-            subtitle: Text(_version),
-          ),
+          ListTile(title: const Text('Version'), subtitle: Text(_version)),
         ],
       ),
     );
   }
 
+  /* GOOGLE DRIVE HELPER METHOD REMOVED
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
@@ -660,6 +973,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return '${dateTime.month}/${dateTime.day}/${dateTime.year}';
     }
   }
+  */
 }
 
 // Sync Log Screen
@@ -671,34 +985,22 @@ class SyncLogScreen extends ConsumerWidget {
     final syncLog = ref.watch(syncLogProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sync Log'),
-      ),
+      appBar: AppBar(title: const Text('Sync Log')),
       body: syncLog.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.history,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
+                  Icon(Icons.history, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
                     'No sync activity yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Sync logs will appear here',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -731,10 +1033,7 @@ class SyncLogScreen extends ConsumerWidget {
                   ),
                   trailing: Text(
                     _formatLogTimestamp(entry.timestamp),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                 );
               },

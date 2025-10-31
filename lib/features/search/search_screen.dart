@@ -43,13 +43,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// Fuzzy match scoring - returns a score between 0 and 1
   double _fuzzyMatchScore(String text, String query) {
     if (query.isEmpty) return 0;
-    
+
     text = text.toLowerCase();
     query = query.toLowerCase();
-    
+
     // Exact match gets highest score
     if (text == query) return 1.0;
-    
+
     // Contains gets high score
     if (text.contains(query)) {
       // Score based on position and length ratio
@@ -58,13 +58,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       final positionScore = 1 - (position / text.length);
       return 0.7 + (0.2 * lengthRatio) + (0.1 * positionScore);
     }
-    
+
     // Character-by-character fuzzy matching
     int queryIndex = 0;
     int matchCount = 0;
     int consecutiveMatches = 0;
     double bonusScore = 0;
-    
+
     for (int i = 0; i < text.length && queryIndex < query.length; i++) {
       if (text[i] == query[queryIndex]) {
         matchCount++;
@@ -78,28 +78,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         consecutiveMatches = 0;
       }
     }
-    
+
     if (queryIndex == query.length) {
       // All query characters found
       final matchRatio = matchCount / query.length;
-      final lengthPenalty = 1 - ((text.length - query.length) / (text.length + query.length));
-      return (0.3 * matchRatio + 0.2 * lengthPenalty + bonusScore).clamp(0.0, 0.69);
+      final lengthPenalty =
+          1 - ((text.length - query.length) / (text.length + query.length));
+      return (0.3 * matchRatio + 0.2 * lengthPenalty + bonusScore).clamp(
+        0.0,
+        0.69,
+      );
     }
-    
+
     return 0; // No match
   }
 
   /// Check if tags match the query
   bool _tagsMatch(List<String> tags, String query) {
     if (query.isEmpty) return false;
-    
+
     final queryLower = query.toLowerCase();
-    
+
     // Direct tag match (with or without #)
     if (queryLower.startsWith('#')) {
       return tags.any((tag) => tag.toLowerCase() == queryLower);
     }
-    
+
     // Match tag content without #
     return tags.any((tag) => tag.toLowerCase().contains('#$queryLower'));
   }
@@ -114,14 +118,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     // Filter and score results
     List<({Task item, double score, String matchType})> scoredTasks = [];
     List<({Note item, double score, String matchType})> scoredNotes = [];
-    List<({JournalEntry item, double score, String matchType})> scoredJournals = [];
+    List<({JournalEntry item, double score, String matchType})> scoredJournals =
+        [];
 
     if (searchQuery.isNotEmpty) {
       // Score tasks
       for (final task in tasks) {
         double score = 0;
         String matchType = '';
-        
+
         if (_searchByTagsOnly) {
           if (_tagsMatch(task.tags, searchQuery)) {
             score = 1.0;
@@ -134,7 +139,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             score = textScore;
             matchType = 'text';
           }
-          
+
           // Check note match
           if (task.note != null) {
             final noteScore = _fuzzyMatchScore(task.note!, searchQuery) * 0.8;
@@ -143,14 +148,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               matchType = 'note';
             }
           }
-          
+
           // Check tag match
           if (_tagsMatch(task.tags, searchQuery)) {
             score = (score + 0.9).clamp(0.0, 1.0);
             matchType = matchType.isEmpty ? 'tag' : '$matchType+tag';
           }
         }
-        
+
         if (score > 0.3) {
           scoredTasks.add((item: task, score: score, matchType: matchType));
         }
@@ -160,7 +165,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       for (final note in notes) {
         double score = 0;
         String matchType = '';
-        
+
         if (_searchByTagsOnly) {
           if (_tagsMatch(note.tags, searchQuery)) {
             score = 1.0;
@@ -169,27 +174,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         } else {
           // Check title match
           if (note.optionalTitle != null) {
-            final titleScore = _fuzzyMatchScore(note.optionalTitle!, searchQuery) * 1.1;
+            final titleScore =
+                _fuzzyMatchScore(note.optionalTitle!, searchQuery) * 1.1;
             if (titleScore > score) {
               score = titleScore;
               matchType = 'title';
             }
           }
-          
+
           // Check content match
           final contentScore = _fuzzyMatchScore(note.content, searchQuery);
           if (contentScore > score) {
             score = contentScore;
             matchType = 'content';
           }
-          
+
           // Check tag match
           if (_tagsMatch(note.tags, searchQuery)) {
             score = (score + 0.9).clamp(0.0, 1.0);
             matchType = matchType.isEmpty ? 'tag' : '$matchType+tag';
           }
         }
-        
+
         if (score > 0.3) {
           scoredNotes.add((item: note, score: score, matchType: matchType));
         }
@@ -199,7 +205,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       for (final entry in journalEntries) {
         double score = 0;
         String matchType = '';
-        
+
         if (_searchByTagsOnly) {
           if (_tagsMatch(entry.tags, searchQuery)) {
             score = 1.0;
@@ -212,14 +218,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             score = bodyScore;
             matchType = 'body';
           }
-          
+
           // Check tag match
           if (_tagsMatch(entry.tags, searchQuery)) {
             score = (score + 0.9).clamp(0.0, 1.0);
             matchType = matchType.isEmpty ? 'tag' : '$matchType+tag';
           }
         }
-        
+
         if (score > 0.3) {
           scoredJournals.add((item: entry, score: score, matchType: matchType));
         }
@@ -231,7 +237,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       scoredJournals.sort((a, b) => b.score.compareTo(a.score));
     }
 
-    final totalResults = scoredTasks.length + scoredNotes.length + scoredJournals.length;
+    final totalResults =
+        scoredTasks.length + scoredNotes.length + scoredJournals.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -244,7 +251,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               controller: _searchController,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: _searchByTagsOnly ? 'Search by tags...' : 'Search tasks, notes, journals...',
+                hintText: _searchByTagsOnly
+                    ? 'Search by tags...'
+                    : 'Search tasks, notes, journals...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -305,106 +314,128 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search, size: 64, color: Theme.of(context).iconTheme.color?.withOpacity(0.4)),
+                        Icon(
+                          Icons.search,
+                          size: 64,
+                          color: Theme.of(
+                            context,
+                          ).iconTheme.color?.withOpacity(0.4),
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Search your tasks, notes, and journals',
-                          style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.color,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Try: project names, tags, or keywords',
                           style: TextStyle(
-                            color: Theme.of(context).textTheme.bodySmall?.color, 
-                            fontSize: 12
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ),
                   )
                 : totalResults == 0
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_off, size: 64, color: Theme.of(context).iconTheme.color?.withOpacity(0.4)),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No results found',
-                              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Try different keywords or toggle search mode',
-                              style: TextStyle(
-                                color: Theme.of(context).textTheme.bodySmall?.color,
-                                fontSize: 12
-                              ),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 64,
+                          color: Theme.of(
+                            context,
+                          ).iconTheme.color?.withOpacity(0.4),
                         ),
-                      )
-                    : ListView(
-                        children: [
-                          if (scoredTasks.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.task_alt, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Tasks (${scoredTasks.length})',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'No results found',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.color,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Try different keywords or toggle search mode',
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    children: [
+                      if (scoredTasks.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.task_alt, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Tasks (${scoredTasks.length})',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            ...scoredTasks.map((scored) => _buildTaskTile(scored)),
-                          ],
-                          if (scoredNotes.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.note, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Notes (${scoredNotes.length})',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                            ],
+                          ),
+                        ),
+                        ...scoredTasks.map((scored) => _buildTaskTile(scored)),
+                      ],
+                      if (scoredNotes.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.note, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Notes (${scoredNotes.length})',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            ...scoredNotes.map((scored) => _buildNoteTile(scored)),
-                          ],
-                          if (scoredJournals.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.book, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Journal Entries (${scoredJournals.length})',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                            ],
+                          ),
+                        ),
+                        ...scoredNotes.map((scored) => _buildNoteTile(scored)),
+                      ],
+                      if (scoredJournals.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.book, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Journal Entries (${scoredJournals.length})',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            ...scoredJournals.map((scored) => _buildJournalTile(scored)),
-                          ],
-                        ],
-                      ),
+                            ],
+                          ),
+                        ),
+                        ...scoredJournals.map(
+                          (scored) => _buildJournalTile(scored),
+                        ),
+                      ],
+                    ],
+                  ),
           ),
         ],
       ),
@@ -417,7 +448,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       leading: Icon(
         task.category == 'event' ? Icons.event : Icons.circle,
         size: task.category == 'event' ? 24 : 12,
-        color: task.status == 'done' ? Colors.grey : Theme.of(context).colorScheme.primary,
+        color: task.status == 'done'
+            ? Colors.grey
+            : Theme.of(context).colorScheme.primary,
       ),
       title: Text(
         task.text,
@@ -433,16 +466,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             Text(
               task.tags.join(' '),
               style: TextStyle(
-                color: Theme.of(context).colorScheme.primary, 
-                fontSize: 12
+                color: Theme.of(context).colorScheme.primary,
+                fontSize: 12,
               ),
             ),
           if (task.note != null && task.note!.isNotEmpty)
             Text(
               task.note!,
               style: TextStyle(
-                color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.8), 
-                fontSize: 11
+                color: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.color?.withOpacity(0.8),
+                fontSize: 11,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -450,8 +485,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           Text(
             'Due: ${DateFormat('MMM d, yyyy').format(task.dueDate)} • Match: ${scored.matchType}',
             style: TextStyle(
-              color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7), 
-              fontSize: 10
+              color: Theme.of(
+                context,
+              ).textTheme.bodySmall?.color?.withOpacity(0.7),
+              fontSize: 10,
             ),
           ),
         ],
@@ -464,7 +501,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
         child: Text(
           '${(scored.score * 100).toInt()}%',
-          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
@@ -478,24 +519,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            note.content,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(note.content, maxLines: 2, overflow: TextOverflow.ellipsis),
           if (note.tags.isNotEmpty)
             Text(
               note.tags.join(' '),
               style: TextStyle(
-                color: Theme.of(context).colorScheme.primary, 
-                fontSize: 12
+                color: Theme.of(context).colorScheme.primary,
+                fontSize: 12,
               ),
             ),
           Text(
             '${DateFormat('MMM d, yyyy').format(note.creationDate)} • Match: ${scored.matchType}',
             style: TextStyle(
-              color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7), 
-              fontSize: 10
+              color: Theme.of(
+                context,
+              ).textTheme.bodySmall?.color?.withOpacity(0.7),
+              fontSize: 10,
             ),
           ),
         ],
@@ -508,13 +547,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
         child: Text(
           '${(scored.score * 100).toInt()}%',
-          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildJournalTile(({JournalEntry item, double score, String matchType}) scored) {
+  Widget _buildJournalTile(
+    ({JournalEntry item, double score, String matchType}) scored,
+  ) {
     final entry = scored.item;
     return ListTile(
       leading: const Icon(Icons.book),
@@ -522,24 +567,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            entry.body,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(entry.body, maxLines: 2, overflow: TextOverflow.ellipsis),
           if (entry.tags.isNotEmpty)
             Text(
               entry.tags.join(' '),
               style: TextStyle(
-                color: Theme.of(context).colorScheme.primary, 
-                fontSize: 12
+                color: Theme.of(context).colorScheme.primary,
+                fontSize: 12,
               ),
             ),
           Text(
             'Match: ${scored.matchType}',
             style: TextStyle(
-              color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7), 
-              fontSize: 10
+              color: Theme.of(
+                context,
+              ).textTheme.bodySmall?.color?.withOpacity(0.7),
+              fontSize: 10,
             ),
           ),
         ],
@@ -552,7 +595,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
         child: Text(
           '${(scored.score * 100).toInt()}%',
-          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

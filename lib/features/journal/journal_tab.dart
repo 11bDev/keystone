@@ -75,7 +75,10 @@ class JournalTab extends ConsumerWidget {
       context: context,
       builder: (context) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600),
             padding: const EdgeInsets.all(24),
@@ -95,97 +98,100 @@ class JournalTab extends ConsumerWidget {
                       children: [
                         TextField(
                           controller: bodyController,
-                  decoration: const InputDecoration(
-                    labelText: 'Body',
-                    border: OutlineInputBorder(),
-                  ),
-                  maxLines: 10,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: tagsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Tags (e.g. #work #home)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                          final picker = ImagePicker();
-                          final pickedFile = await picker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-                          if (pickedFile != null) {
-                            if (entry != null) {
-                              ref
-                                  .read(journalEntryListProvider.notifier)
-                                  .addImageToJournalEntry(entry, pickedFile.path);
+                          decoration: const InputDecoration(
+                            labelText: 'Body',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 10,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: tagsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Tags (e.g. #work #home)',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final picker = ImagePicker();
+                            final pickedFile = await picker.pickImage(
+                              source: ImageSource.gallery,
+                            );
+                            if (pickedFile != null) {
+                              if (entry != null) {
+                                ref
+                                    .read(journalEntryListProvider.notifier)
+                                    .addImageToJournalEntry(
+                                      entry,
+                                      pickedFile.path,
+                                    );
+                              }
                             }
-                          }
+                          },
+                          icon: const Icon(Icons.image),
+                          label: const Text('Insert Picture'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    if (entry != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () {
+                          ref
+                              .read(journalEntryListProvider.notifier)
+                              .deleteJournalEntry(entry);
+                          Navigator.pop(context);
                         },
-                        icon: const Icon(Icons.image),
-                        label: const Text('Insert Picture'),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  if (entry != null) ...[
                     const SizedBox(width: 8),
-                    TextButton(
+                    FilledButton(
                       onPressed: () {
-                        ref
-                            .read(journalEntryListProvider.notifier)
-                            .deleteJournalEntry(entry);
-                        Navigator.pop(context);
+                        if (bodyController.text.isNotEmpty) {
+                          if (entry == null) {
+                            ref
+                                .read(journalEntryListProvider.notifier)
+                                .addJournalEntry(
+                                  bodyController.text,
+                                  tags: tagsController.text,
+                                );
+                          } else {
+                            ref
+                                .read(journalEntryListProvider.notifier)
+                                .updateJournalEntry(
+                                  entry,
+                                  bodyController.text,
+                                  newTags: tagsController.text,
+                                );
+                          }
+                          Navigator.pop(context);
+                        }
                       },
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(color: Colors.red),
-                      ),
+                      child: Text(entry == null ? 'Add' : 'Save'),
                     ),
                   ],
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      if (bodyController.text.isNotEmpty) {
-                        if (entry == null) {
-                          ref
-                              .read(journalEntryListProvider.notifier)
-                              .addJournalEntry(
-                                bodyController.text,
-                                tags: tagsController.text,
-                              );
-                        } else {
-                          ref
-                              .read(journalEntryListProvider.notifier)
-                              .updateJournalEntry(
-                                entry,
-                                bodyController.text,
-                                newTags: tagsController.text,
-                              );
-                        }
-                        Navigator.pop(context);
-                      }
-                    },
-                    child: Text(entry == null ? 'Add' : 'Save'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
   }
 }

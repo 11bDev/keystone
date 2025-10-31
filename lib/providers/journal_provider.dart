@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:keystone/providers/sync_provider.dart';
+import 'package:keystone/providers/firestore_sync_provider.dart';
 
 final journalEntryListProvider =
     StateNotifierProvider<JournalEntryListNotifier, List<JournalEntry>>((ref) {
@@ -11,7 +12,7 @@ final journalEntryListProvider =
 class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
   final Box<JournalEntry> _box = Hive.box<JournalEntry>('journal_entries');
   final Ref _ref;
-  
+
   JournalEntryListNotifier(this._ref) : super([]) {
     _loadEntries();
   }
@@ -34,6 +35,15 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
     }
   }
 
+  void _syncToFirestore(JournalEntry entry) {
+    try {
+      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
+      firestoreSyncService.syncSingleJournalEntry(entry);
+    } catch (e) {
+      // Silently fail - Firestore sync is best-effort
+    }
+  }
+
   void addJournalEntry(
     String body, {
     List<String>? imagePaths,
@@ -43,11 +53,13 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
       ..body = body
       ..creationDate = DateTime.now()
       ..imagePaths = imagePaths ?? []
-      ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [];
+      ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
+      ..lastModified = DateTime.now();
 
     await _box.add(entry);
     state = [entry, ...state];
     await _triggerAutoSync();
+    _syncToFirestore(entry);
   }
 
   void updateJournalEntry(
@@ -58,27 +70,37 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
     entry.body = newBody;
     entry.tags =
         newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [];
+    entry.lastModified = DateTime.now();
     await entry.save();
     state = [
       for (final e in state)
         if (e.key == entry.key) entry else e,
     ];
     await _triggerAutoSync();
+    _syncToFirestore(entry);
   }
 
   void addImageToJournalEntry(JournalEntry entry, String imagePath) async {
     entry.imagePaths.add(imagePath);
+    entry.lastModified = DateTime.now();
     await entry.save();
     state = [
       for (final e in state)
         if (e.key == entry.key) entry else e,
     ];
     await _triggerAutoSync();
+    _syncToFirestore(entry);
   }
 
   void deleteJournalEntry(JournalEntry entry) async {
     await entry.delete();
     state = state.where((e) => e.key != entry.key).toList();
     await _triggerAutoSync();
+    
+    // Delete from Firestore
+    if (entry.firestoreId != null) {
+      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
+      await firestoreSyncService.deleteJournalEntryFromFirestore(entry);
+    }
   }
 }

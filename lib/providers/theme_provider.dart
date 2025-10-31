@@ -2,13 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-enum AppTheme {
-  light,
-  dark,
-  sepia,
-  parchment,
-  newspaper,
-}
+enum AppTheme { light, dark, sepia, parchment, newspaper }
 
 final themeProvider = StateNotifierProvider<ThemeNotifier, AppTheme>((ref) {
   return ThemeNotifier();
@@ -68,8 +62,16 @@ class AppThemes {
     scaffoldBackgroundColor: const Color(0xFF121212),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(fontSize: 18.0, fontFamily: 'Roboto', color: Colors.white70),
-      bodyMedium: TextStyle(fontSize: 16.0, fontFamily: 'Roboto', color: Colors.white70),
+      bodyLarge: TextStyle(
+        fontSize: 18.0,
+        fontFamily: 'Roboto',
+        color: Colors.white70,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 16.0,
+        fontFamily: 'Roboto',
+        color: Colors.white70,
+      ),
       titleLarge: TextStyle(
         fontSize: 22.0,
         fontWeight: FontWeight.bold,
@@ -91,10 +93,7 @@ class AppThemes {
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        side: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
       ),
     ),
     appBarTheme: const AppBarTheme(
@@ -334,9 +333,7 @@ class AppThemes {
           letterSpacing: 0.5,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         elevation: 2,
       ),
     ),
@@ -457,11 +454,10 @@ class AppThemes {
       elevation: 1,
       shadowColor: Colors.black.withOpacity(0.1),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4), // Sharper corners for newspaper feel
-        side: BorderSide(
-          color: const Color(0xFFE0E0E0),
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(
+          4,
+        ), // Sharper corners for newspaper feel
+        side: BorderSide(color: const Color(0xFFE0E0E0), width: 1),
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -523,9 +519,7 @@ class AppThemes {
           letterSpacing: 0.5,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         elevation: 2,
       ),
     ),

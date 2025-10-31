@@ -33,7 +33,7 @@ class SyncService implements SyncServiceInterface {
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
-  
+
   /// Get the calendar service instance
   @override
   GoogleCalendarService get calendarService => _calendarService;
@@ -56,7 +56,7 @@ class SyncService implements SyncServiceInterface {
 
       // Initialize Drive API
       _driveApi = drive.DriveApi(_authenticatedClient!);
-      
+
       // Initialize Calendar service
       _calendarService.initialize(_authenticatedClient);
 
@@ -248,9 +248,8 @@ class SyncService implements SyncServiceInterface {
 
       if (existingFiles.files != null && existingFiles.files!.isNotEmpty) {
         // Update existing file - don't set parents in update requests
-        final updateFile = drive.File()
-          ..name = _backupFileName;
-        
+        final updateFile = drive.File()..name = _backupFileName;
+
         await _driveApi!.files.update(
           updateFile,
           existingFiles.files!.first.id!,
@@ -262,7 +261,7 @@ class SyncService implements SyncServiceInterface {
         final createFile = drive.File()
           ..name = _backupFileName
           ..parents = [folderId];
-        
+
         await _driveApi!.files.create(createFile, uploadMedia: media);
         print('Created new backup in Google Drive');
       }

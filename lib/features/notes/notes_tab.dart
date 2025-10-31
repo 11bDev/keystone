@@ -65,14 +65,19 @@ class NotesTab extends ConsumerWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete', style: TextStyle(color: Colors.red)),
+                title: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
                 onTap: () async {
                   Navigator.pop(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Delete Note'),
-                      content: const Text('Are you sure you want to delete this note?'),
+                      content: const Text(
+                        'Are you sure you want to delete this note?',
+                      ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -80,12 +85,15 @@ class NotesTab extends ConsumerWidget {
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
                         ),
                       ],
                     ),
                   );
-                  
+
                   if (confirm == true) {
                     ref.read(noteListProvider.notifier).deleteNote(note);
                   }
@@ -107,7 +115,10 @@ class NotesTab extends ConsumerWidget {
       context: context,
       builder: (context) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 600),
             padding: const EdgeInsets.all(24),
@@ -137,32 +148,32 @@ class NotesTab extends ConsumerWidget {
                           controller: contentController,
                           decoration: const InputDecoration(
                             labelText: 'Content',
-                          border: OutlineInputBorder(),
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 5,
                         ),
-                        maxLines: 5,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: tagsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Tags (e.g. #work #home)',
-                          border: OutlineInputBorder(),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: tagsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Tags (e.g. #work #home)',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
                       onPressed: () {
                         if (contentController.text.isNotEmpty) {
                           if (note == null) {

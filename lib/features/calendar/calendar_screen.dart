@@ -19,7 +19,7 @@ class CalendarScreen extends ConsumerStatefulWidget {
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   DateTime _selectedDay = DateTime.now();
   DateTime _focusedDay = DateTime.now();
-  
+
   // Track expanded state for each category
   final Map<String, bool> _expandedCategories = {
     'Tasks': true,
@@ -220,7 +220,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: AlertDialog(
@@ -305,7 +308,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       onPressed: () {
                         if (controller.text.isNotEmpty && dueDate != null) {
                           if (task == null) {
-                            ref.read(taskListProvider.notifier).addTask(
+                            ref
+                                .read(taskListProvider.notifier)
+                                .addTask(
                                   controller.text,
                                   tags: tagsController.text,
                                   dueDate: dueDate,
@@ -315,7 +320,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                                       : noteController.text,
                                 );
                           } else {
-                            ref.read(taskListProvider.notifier).updateTask(
+                            ref
+                                .read(taskListProvider.notifier)
+                                .updateTask(
                                   task,
                                   controller.text,
                                   tagsController.text,
@@ -350,7 +357,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     groupedEvents.forEach((header, events) {
       if (events.isNotEmpty) {
         final categoryEvents = <Widget>[];
-        
+
         for (final event in events) {
           if (event is Task) {
             categoryEvents.add(_buildTaskItem(context, ref, event));
@@ -378,7 +385,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             );
           }
         }
-        
+
         eventWidgets.add(
           ExpansionTile(
             initiallyExpanded: _expandedCategories[header] ?? true,
@@ -427,9 +434,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           },
           defaultBuilder: (context, day, focusedDay) {
             final now = DateTime.now();
-            final isPast = day.isBefore(
-              DateTime(now.year, now.month, now.day),
-            );
+            final isPast = day.isBefore(DateTime(now.year, now.month, now.day));
             final hasPending = allTasks.any(
               (task) =>
                   isSameDay(task.dueDate, day) && task.status == 'pending',
@@ -473,8 +478,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               child: Text(
                 'No items for ${DateFormat.yMMMd().format(_selectedDay)}',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                    ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.6),
+                ),
               ),
             ),
           )

@@ -23,13 +23,14 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..tags = (fields[3] as List).cast<String>()
       ..category = fields[4] as String
       ..note = fields[5] as String?
-      ..googleCalendarEventId = fields[6] as String?;
+      ..googleCalendarEventId = fields[6] as String?
+      ..lastModified = fields[7] as DateTime?;
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.text)
       ..writeByte(1)
@@ -43,7 +44,9 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(5)
       ..write(obj.note)
       ..writeByte(6)
-      ..write(obj.googleCalendarEventId);
+      ..write(obj.googleCalendarEventId)
+      ..writeByte(7)
+      ..write(obj.lastModified);
   }
 
   @override

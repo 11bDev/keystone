@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/task.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:keystone/providers/sync_provider.dart';
+import 'package:keystone/providers/firestore_sync_provider.dart';
 
 final taskListProvider = StateNotifierProvider<TaskListNotifier, List<Task>>((
   ref,
@@ -12,7 +13,7 @@ final taskListProvider = StateNotifierProvider<TaskListNotifier, List<Task>>((
 class TaskListNotifier extends StateNotifier<List<Task>> {
   final Box<Task> _box = Hive.box<Task>('tasks');
   final Ref _ref;
-  
+
   TaskListNotifier(this._ref) : super([]) {
     _loadTasks();
   }
@@ -33,6 +34,16 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
     }
   }
 
+  Future<void> _syncToFirestore(Task task) async {
+    try {
+      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
+      await firestoreSyncService.syncSingleTask(task);
+    } catch (e) {
+      // Silently fail - Firestore sync is best-effort
+      print('Firestore sync failed: $e');
+    }
+  }
+
   void addTask(
     String text, {
     String? tags,
@@ -46,28 +57,34 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
       ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
       ..category = category
       ..note = note
-      ..status = 'pending';
+      ..status = 'pending'
+      ..lastModified = DateTime.now();
 
     await _box.add(task);
     state = [...state, task];
     await _triggerAutoSync();
+    await _syncToFirestore(task);
   }
-  
+
   /// Add a pre-constructed Task object (useful for adding tasks with additional fields)
   void addTaskObject(Task task) async {
+    task.lastModified = DateTime.now();
     await _box.add(task);
     state = [...state, task];
     await _triggerAutoSync();
+    await _syncToFirestore(task);
   }
 
   void toggleTaskStatus(Task task) async {
     task.status = task.status == 'pending' ? 'done' : 'pending';
+    task.lastModified = DateTime.now();
     await task.save();
     state = [
       for (final t in state)
         if (t.key == task.key) task else t,
     ];
     await _triggerAutoSync();
+    await _syncToFirestore(task);
   }
 
   void updateTask(
@@ -87,8 +104,9 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
       task.category = category;
     }
     task.note = note;
+    task.lastModified = DateTime.now();
     await task.save();
-    
+
     // If the task has a Google Calendar event, update it
     if (task.googleCalendarEventId != null && task.category == 'event') {
       try {
@@ -105,12 +123,13 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
         // Continue with local update even if calendar update fails
       }
     }
-    
+
     state = [
       for (final t in state)
         if (t.key == task.key) task else t,
     ];
     await _triggerAutoSync();
+    _syncToFirestore(task);
   }
 
   void migrateTask(Task task, DateTime newDueDate) async {
@@ -121,7 +140,8 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
       ..tags = task.tags
       ..category = task.category
       ..note = task.note
-      ..status = 'pending';
+      ..status = 'pending'
+      ..lastModified = DateTime.now();
 
     // If the task has a Google Calendar event, update it with the new date
     if (task.googleCalendarEventId != null) {
@@ -129,11 +149,9 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
         final syncService = _ref.read(syncServiceProvider);
         if (syncService.isSignedIn && task.category == 'event') {
           // Update the event in Google Calendar with new date
-          final success = await syncService.calendarService.updateEventInCalendar(
-            task.googleCalendarEventId!,
-            newTask,
-          );
-          
+          final success = await syncService.calendarService
+              .updateEventInCalendar(task.googleCalendarEventId!, newTask);
+
           if (success) {
             // Copy the calendar event ID to the new task
             newTask.googleCalendarEventId = task.googleCalendarEventId;
@@ -148,6 +166,7 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
 
     // Update the original task's status to 'migrated'
     task.status = 'migrated';
+    task.lastModified = DateTime.now();
 
     await task.save();
     await _box.add(newTask);
@@ -155,26 +174,32 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
     // Update the state
     state = [...state.where((t) => t.key != task.key), task, newTask];
     await _triggerAutoSync();
+    _syncToFirestore(task); // Sync the migrated original task
+    _syncToFirestore(newTask); // Sync the new task
   }
 
   void cancelTask(Task task) async {
     task.status = 'canceled';
+    task.lastModified = DateTime.now();
     await task.save();
     state = [
       for (final t in state)
         if (t.key == task.key) task else t,
     ];
     await _triggerAutoSync();
+    _syncToFirestore(task);
   }
 
   void uncancelTask(Task task) async {
     task.status = 'pending';
+    task.lastModified = DateTime.now();
     await task.save();
     state = [
       for (final t in state)
         if (t.key == task.key) task else t,
     ];
     await _triggerAutoSync();
+    _syncToFirestore(task);
   }
 
   void deleteTask(Task task) async {
@@ -192,9 +217,15 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
         // Continue with local deletion even if calendar deletion fails
       }
     }
-    
+
     await task.delete();
     state = state.where((t) => t.key != task.key).toList();
     await _triggerAutoSync();
+    
+    // Delete from Firestore
+    if (task.firestoreId != null) {
+      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
+      await firestoreSyncService.deleteTaskFromFirestore(task);
+    }
   }
 }

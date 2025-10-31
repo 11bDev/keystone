@@ -32,7 +32,7 @@ class SyncService {
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
-  
+
   /// Get the calendar service instance
   GoogleCalendarService get calendarService => _calendarService;
 
@@ -63,7 +63,7 @@ class SyncService {
 
       // Initialize Drive API
       _driveApi = drive.DriveApi(_authenticatedClient!);
-      
+
       // Initialize Calendar service
       _calendarService.initialize(_authenticatedClient);
 

@@ -196,37 +196,25 @@ class _TasksTabState extends ConsumerState<TasksTab> {
         Color? dayColor;
         Color? textColor;
         Color? iconColor;
-        
+
         if (hasIncompleteTasks) {
-          dayColor = isDark 
+          dayColor = isDark
               ? Colors.red.shade900.withOpacity(0.3)
               : Colors.red.shade50;
-          textColor = isDark 
-              ? Colors.red.shade300
-              : Colors.red.shade900;
-          iconColor = isDark 
-              ? Colors.red.shade400
-              : Colors.red.shade700;
+          textColor = isDark ? Colors.red.shade300 : Colors.red.shade900;
+          iconColor = isDark ? Colors.red.shade400 : Colors.red.shade700;
         } else if (isPast) {
-          dayColor = isDark 
+          dayColor = isDark
               ? Colors.grey.shade800.withOpacity(0.3)
               : Colors.grey.shade100;
-          textColor = isDark 
-              ? Colors.grey.shade400
-              : Colors.grey.shade700;
-          iconColor = isDark 
-              ? Colors.grey.shade500
-              : Colors.grey.shade600;
+          textColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+          iconColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
         } else if (isToday) {
-          dayColor = isDark 
+          dayColor = isDark
               ? Colors.blue.shade900.withOpacity(0.3)
               : Colors.blue.shade50;
-          textColor = isDark 
-              ? Colors.blue.shade300
-              : Colors.blue.shade900;
-          iconColor = isDark 
-              ? Colors.blue.shade400
-              : Colors.blue.shade700;
+          textColor = isDark ? Colors.blue.shade300 : Colors.blue.shade900;
+          iconColor = isDark ? Colors.blue.shade400 : Colors.blue.shade700;
         }
 
         return Card(
@@ -261,7 +249,9 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                       child: Text(
                         'No tasks for this day',
                         style: TextStyle(
-                          color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.color?.withOpacity(0.6),
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -304,8 +294,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
     final Map<DateTime, Map<DateTime, List<Task>>> groupedByMonthAndDate = {};
     for (final task in futureTasks) {
       final month = DateTime(task.dueDate.year, task.dueDate.month);
-      final date = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
-      
+      final date = DateTime(
+        task.dueDate.year,
+        task.dueDate.month,
+        task.dueDate.day,
+      );
+
       if (groupedByMonthAndDate[month] == null) {
         groupedByMonthAndDate[month] = {};
       }
@@ -323,7 +317,7 @@ class _TasksTabState extends ConsumerState<TasksTab> {
         final month = sortedMonths[index];
         final dateGroups = groupedByMonthAndDate[month]!;
         final sortedDates = dateGroups.keys.toList()..sort();
-        
+
         return ExpansionTile(
           title: Text(
             '${_getMonthName(month.month)} ${month.year}',
@@ -336,16 +330,22 @@ class _TasksTabState extends ConsumerState<TasksTab> {
             final dayNumber = date.day;
             final suffix = _getDaySuffix(dayNumber);
             final dateLabel = '$dayOfWeek the $dayNumber$suffix';
-            
+
             return [
               Padding(
-                padding: const EdgeInsets.only(left: 16.0, top: 8.0, bottom: 4.0),
+                padding: const EdgeInsets.only(
+                  left: 16.0,
+                  top: 8.0,
+                  bottom: 4.0,
+                ),
                 child: Text(
                   dateLabel,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacity(0.8),
                   ),
                 ),
               ),
@@ -356,7 +356,7 @@ class _TasksTabState extends ConsumerState<TasksTab> {
       },
     );
   }
-  
+
   String _getDaySuffix(int day) {
     if (day >= 11 && day <= 13) {
       return 'th';
@@ -482,7 +482,9 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                 task.note!,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.8),
+                  color: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.color?.withOpacity(0.8),
                   fontStyle: FontStyle.italic,
                 ),
                 maxLines: 2,
@@ -508,7 +510,10 @@ class _TasksTabState extends ConsumerState<TasksTab> {
               },
               itemBuilder: (BuildContext context) {
                 return <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Edit'),
+                  ),
                   // Show Migrate only for pending tasks
                   if (task.status == 'pending')
                     const PopupMenuItem<String>(
@@ -647,9 +652,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
             final syncService = ref.read(syncServiceProvider);
             final isSignedIn = syncService.isSignedIn;
             final showGoogleCalendarOption = category == 'event' && isSignedIn;
-            
+
             return Dialog(
-              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 600),
                 padding: const EdgeInsets.all(24),
@@ -669,8 +677,14 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                           children: [
                             SegmentedButton<String>(
                               segments: const [
-                                ButtonSegment(value: 'task', label: Text('Task')),
-                                ButtonSegment(value: 'event', label: Text('Event')),
+                                ButtonSegment(
+                                  value: 'task',
+                                  label: Text('Task'),
+                                ),
+                                ButtonSegment(
+                                  value: 'event',
+                                  label: Text('Event'),
+                                ),
                               ],
                               selected: {category},
                               onSelectionChanged: (newSelection) {
@@ -687,7 +701,9 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                             TextField(
                               controller: controller,
                               autofocus: true,
-                              decoration: const InputDecoration(labelText: 'Description'),
+                              decoration: const InputDecoration(
+                                labelText: 'Description',
+                              ),
                             ),
                             TextField(
                               controller: tagsController,
@@ -751,7 +767,9 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                               const SizedBox(height: 16),
                               CheckboxListTile(
                                 title: const Text('Add to Google Calendar'),
-                                subtitle: const Text('Sync this event to your Google Calendar'),
+                                subtitle: const Text(
+                                  'Sync this event to your Google Calendar',
+                                ),
                                 value: addToGoogleCalendar,
                                 onChanged: (value) {
                                   setState(() {
@@ -790,31 +808,40 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                   ..note = noteController.text.isEmpty
                                       ? null
                                       : noteController.text;
-                                
+
                                 // Add to Google Calendar if requested
-                                if (addToGoogleCalendar && category == 'event') {
-                                  final calendarService = syncService.calendarService;
-                                  final eventId = await calendarService.addEventToCalendar(newTask);
+                                if (addToGoogleCalendar &&
+                                    category == 'event') {
+                                  final calendarService =
+                                      syncService.calendarService;
+                                  final eventId = await calendarService
+                                      .addEventToCalendar(newTask);
                                   if (eventId != null) {
                                     newTask.googleCalendarEventId = eventId;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content: Text('Event added to Google Calendar'),
+                                        content: Text(
+                                          'Event added to Google Calendar',
+                                        ),
                                         duration: Duration(seconds: 2),
                                       ),
                                     );
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content: Text('Failed to add to Google Calendar'),
+                                        content: Text(
+                                          'Failed to add to Google Calendar',
+                                        ),
                                         backgroundColor: Colors.orange,
                                         duration: Duration(seconds: 2),
                                       ),
                                     );
                                   }
                                 }
-                                
-                                ref.read(taskListProvider.notifier).addTaskObject(newTask);
+
+                                ref
+                                    .read(taskListProvider.notifier)
+                                    .addTaskObject(newTask);
                               } else {
                                 // Updating existing task
                                 ref
@@ -829,10 +856,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                           ? null
                                           : noteController.text,
                                     );
-                                
+
                                 // Update in Google Calendar if it was synced
-                                if (task.googleCalendarEventId != null && category == 'event') {
-                                  final calendarService = syncService.calendarService;
+                                if (task.googleCalendarEventId != null &&
+                                    category == 'event') {
+                                  final calendarService =
+                                      syncService.calendarService;
                                   await calendarService.updateEventInCalendar(
                                     task.googleCalendarEventId!,
                                     task,

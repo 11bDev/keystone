@@ -15,10 +15,7 @@ import 'package:path_provider/path_provider.dart';
 /// Mobile-compatible Google Drive sync using native Google Sign-In
 class SyncService implements SyncServiceInterface {
   static final sign_in.GoogleSignIn _googleSignIn = sign_in.GoogleSignIn(
-    scopes: [
-      drive.DriveApi.driveFileScope,
-      calendar.CalendarApi.calendarScope,
-    ],
+    scopes: [drive.DriveApi.driveFileScope, calendar.CalendarApi.calendarScope],
   );
 
   drive.DriveApi? _driveApi;
@@ -28,21 +25,21 @@ class SyncService implements SyncServiceInterface {
 
   static const String _backupFileName = 'keystone_backup.json';
   static const String _backupFolderName = 'Keystone';
-  
+
   // Constructor now attempts to restore session
   SyncService() {
     _initializeIfNeeded();
   }
-  
+
   /// Get the calendar service instance
   GoogleCalendarService get calendarService => _calendarService;
 
   /// Initialize and restore previous sign-in session if available
   Future<void> _initializeIfNeeded() async {
     if (_initialized) return;
-    
+
     _initialized = true; // Set immediately to prevent duplicate calls
-    
+
     try {
       // Try to restore previous sign-in silently
       final account = await _googleSignIn.signInSilently();
@@ -50,7 +47,7 @@ class SyncService implements SyncServiceInterface {
         print('Restored previous Google sign-in session');
         final auth = await account.authentication;
         final accessToken = auth.accessToken;
-        
+
         if (accessToken != null) {
           _authenticatedClient = _GoogleAuthClient(accessToken, auth);
           _driveApi = drive.DriveApi(_authenticatedClient!);
@@ -76,7 +73,7 @@ class SyncService implements SyncServiceInterface {
 
       final auth = await account.authentication;
       final accessToken = auth.accessToken;
-      
+
       if (accessToken == null) {
         print('Failed to get access token');
         return false;
@@ -258,7 +255,7 @@ class SyncService implements SyncServiceInterface {
   /// Upload backup to Google Drive
   Future<void> uploadBackup() async {
     await _initializeIfNeeded();
-    
+
     if (!isSignedIn) {
       throw Exception('Not signed in to Google Drive');
     }
@@ -288,7 +285,7 @@ class SyncService implements SyncServiceInterface {
         // Update existing file (don't set parents field for updates)
         print('Updating existing backup file...');
         final driveFile = drive.File()..name = _backupFileName;
-        
+
         await _driveApi!.files.update(
           driveFile,
           existingFiles.files!.first.id!,
@@ -301,11 +298,8 @@ class SyncService implements SyncServiceInterface {
         final driveFile = drive.File()
           ..name = _backupFileName
           ..parents = [folderId];
-        
-        await _driveApi!.files.create(
-          driveFile,
-          uploadMedia: media,
-        );
+
+        await _driveApi!.files.create(driveFile, uploadMedia: media);
         print('Backup created successfully');
       }
     } catch (e, stackTrace) {
@@ -318,7 +312,7 @@ class SyncService implements SyncServiceInterface {
   /// Download backup from Google Drive
   Future<void> downloadBackup() async {
     await _initializeIfNeeded();
-    
+
     if (!isSignedIn) {
       throw Exception('Not signed in to Google Drive');
     }
@@ -342,10 +336,12 @@ class SyncService implements SyncServiceInterface {
       print('Found backup file: $fileId');
 
       // Download file content
-      final media = await _driveApi!.files.get(
-        fileId,
-        downloadOptions: drive.DownloadOptions.fullMedia,
-      ) as drive.Media;
+      final media =
+          await _driveApi!.files.get(
+                fileId,
+                downloadOptions: drive.DownloadOptions.fullMedia,
+              )
+              as drive.Media;
 
       // Read the media content
       final List<int> dataStore = [];
@@ -370,7 +366,7 @@ class SyncService implements SyncServiceInterface {
   /// Get last backup time from Google Drive
   Future<DateTime?> getLastBackupTime() async {
     await _initializeIfNeeded();
-    
+
     if (!isSignedIn) return null;
 
     try {
@@ -396,7 +392,9 @@ class SyncService implements SyncServiceInterface {
     final jsonString = const JsonEncoder.withIndent('  ').convert(data);
 
     final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/keystone_backup_${DateTime.now().millisecondsSinceEpoch}.json');
+    final file = File(
+      '${directory.path}/keystone_backup_${DateTime.now().millisecondsSinceEpoch}.json',
+    );
     await file.writeAsString(jsonString);
 
     return file;

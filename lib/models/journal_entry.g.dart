@@ -20,13 +20,14 @@ class JournalEntryAdapter extends TypeAdapter<JournalEntry> {
       ..body = fields[0] as String
       ..creationDate = fields[1] as DateTime
       ..imagePaths = (fields[2] as List).cast<String>()
-      ..tags = (fields[3] as List).cast<String>();
+      ..tags = (fields[3] as List).cast<String>()
+      ..lastModified = fields[4] as DateTime?;
   }
 
   @override
   void write(BinaryWriter writer, JournalEntry obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.body)
       ..writeByte(1)
@@ -34,7 +35,9 @@ class JournalEntryAdapter extends TypeAdapter<JournalEntry> {
       ..writeByte(2)
       ..write(obj.imagePaths)
       ..writeByte(3)
-      ..write(obj.tags);
+      ..write(obj.tags)
+      ..writeByte(4)
+      ..write(obj.lastModified);
   }
 
   @override

@@ -15,32 +15,61 @@ final syncServiceProvider = Provider<SyncServiceInterface>((ref) {
   }
 });
 
-// Provider to track if auto-sync is enabled
-final autoSyncEnabledProvider = StateProvider<bool>((ref) => false);
+// Provider to track if auto-sync is enabled (persisted in Hive)
+final autoSyncEnabledProvider = StateNotifierProvider<AutoSyncNotifier, bool>((
+  ref,
+) {
+  return AutoSyncNotifier();
+});
+
+class AutoSyncNotifier extends StateNotifier<bool> {
+  static const String _boxName = 'settings';
+  static const String _key = 'auto_sync_enabled';
+
+  AutoSyncNotifier() : super(false) {
+    _loadSetting();
+  }
+
+  void _loadSetting() {
+    final box = Hive.box(_boxName);
+    state = box.get(_key, defaultValue: false) as bool;
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    final box = Hive.box(_boxName);
+    await box.put(_key, enabled);
+    state = enabled;
+  }
+}
 
 // Provider for sync log entries (last 24 hours)
 final syncLogProvider = Provider<List<SyncLogEntry>>((ref) {
   final box = Hive.box<SyncLogEntry>('sync_log');
   final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
-  
+
   return box.values
       .where((entry) => entry.timestamp.isAfter(cutoffTime))
       .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 });
 
 // Provider to trigger background sync
-final syncNotifierProvider = StateNotifierProvider<SyncNotifier, AsyncValue<void>>((ref) {
-  return SyncNotifier(ref);
-});
+final syncNotifierProvider =
+    StateNotifierProvider<SyncNotifier, AsyncValue<void>>((ref) {
+      return SyncNotifier(ref);
+    });
 
 class SyncNotifier extends StateNotifier<AsyncValue<void>> {
   final Ref _ref;
-  
+
   SyncNotifier(this._ref) : super(const AsyncValue.data(null));
 
   /// Log a sync event
-  Future<void> _logSync(String type, bool success, [String? errorMessage]) async {
+  Future<void> _logSync(
+    String type,
+    bool success, [
+    String? errorMessage,
+  ]) async {
     try {
       final box = Hive.box<SyncLogEntry>('sync_log');
       final entry = SyncLogEntry(
@@ -50,7 +79,7 @@ class SyncNotifier extends StateNotifier<AsyncValue<void>> {
         errorMessage: errorMessage,
       );
       await box.add(entry);
-      
+
       // Clean up old entries (older than 24 hours)
       final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
       final keysToDelete = <dynamic>[];
@@ -72,7 +101,7 @@ class SyncNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> autoSync() async {
     final syncService = _ref.read(syncServiceProvider);
     final autoSyncEnabled = _ref.read(autoSyncEnabledProvider);
-    
+
     if (!autoSyncEnabled || !syncService.isSignedIn) {
       return;
     }
@@ -93,7 +122,7 @@ class SyncNotifier extends StateNotifier<AsyncValue<void>> {
   /// Manual sync (always runs if signed in)
   Future<void> manualSync() async {
     final syncService = _ref.read(syncServiceProvider);
-    
+
     if (!syncService.isSignedIn) {
       throw Exception('Not signed in to Google Drive');
     }
@@ -114,7 +143,7 @@ class SyncNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> startupSync() async {
     final syncService = _ref.read(syncServiceProvider);
     final autoSyncEnabled = _ref.read(autoSyncEnabledProvider);
-    
+
     if (!autoSyncEnabled || !syncService.isSignedIn) {
       return;
     }
@@ -135,15 +164,24 @@ class SyncNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> changeSync() async {
     final syncService = _ref.read(syncServiceProvider);
     final autoSyncEnabled = _ref.read(autoSyncEnabledProvider);
-    
+
+    print(
+      'changeSync called - autoSyncEnabled: $autoSyncEnabled, isSignedIn: ${syncService.isSignedIn}',
+    );
+
     if (!autoSyncEnabled || !syncService.isSignedIn) {
+      print(
+        'changeSync skipped - autoSync: $autoSyncEnabled, signedIn: ${syncService.isSignedIn}',
+      );
       return;
     }
 
     // Don't update state to avoid UI flicker
     try {
+      print('changeSync: Starting sync to Google Drive...');
       await syncService.syncToGoogleDrive();
       await _logSync('auto', true);
+      print('changeSync: Sync completed successfully');
     } catch (error) {
       await _logSync('auto', false, error.toString());
       print('Change sync failed: $error');

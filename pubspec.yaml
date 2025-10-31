@@ -41,13 +41,20 @@ dependencies:
   flutter_markdown_plus: ^1.0.5
   image_picker: ^1.1.2
   flutter_local_notifications: ^18.0.1
+  # Firebase
+  firebase_core: ^4.2.0
+  cloud_firestore: ^6.0.3
+  firebase_auth: ^6.1.1
+  # Google Sign-In (keep for Firebase Auth)
   google_sign_in: ^6.2.2
+  # Legacy Google Drive (will be phased out)
   googleapis: ^15.0.0
   http: ^1.2.2
+  googleapis_auth: ^2.0.0
+  # Other dependencies
   file_picker: ^10.3.3
   intl: ^0.20.2
   table_calendar: ^3.2.0
-  googleapis_auth: ^2.0.0
   google_fonts: ^6.2.1
   url_launcher: ^6.3.2
   package_info_plus: ^8.1.2
