@@ -1,48 +1,34 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/note.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:keystone/providers/sync_provider.dart';
-import 'package:keystone/providers/firestore_sync_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-final noteListProvider = StateNotifierProvider<NoteListNotifier, List<Note>>((
-  ref,
-) {
+final noteListProvider =
+    StateNotifierProvider<NoteListNotifier, List<Note>>((ref) {
   return NoteListNotifier(ref);
 });
 
 class NoteListNotifier extends StateNotifier<List<Note>> {
-  final Box<Note> _box = Hive.box<Note>('notes');
   final Ref _ref;
+  final CollectionReference<Note> _notesCollection;
 
-  NoteListNotifier(this._ref) : super([]) {
+  NoteListNotifier(this._ref)
+      : _notesCollection =
+            FirebaseFirestore.instance.collection('notes').withConverter<Note>(
+                  fromFirestore: (snapshot, _) => Note.fromFirestore(snapshot),
+                  toFirestore: (note, _) => note.toFirestore(),
+                ),
+        super([]) {
     _loadNotes();
   }
 
-  void _loadNotes() {
-    final notes = _box.values.toList();
-    notes.sort((a, b) => b.creationDate.compareTo(a.creationDate));
-    state = notes;
+  Future<void> _loadNotes() async {
+    final snapshot =
+        await _notesCollection.orderBy('creationDate', descending: true).get();
+    state = snapshot.docs.map((doc) => doc.data()).toList();
   }
 
   void reload() {
     _loadNotes();
-  }
-
-  Future<void> _triggerAutoSync() async {
-    try {
-      await _ref.read(syncNotifierProvider.notifier).changeSync();
-    } catch (e) {
-      // Silently fail - auto-sync is best-effort
-    }
-  }
-
-  void _syncToFirestore(Note note) {
-    try {
-      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
-      firestoreSyncService.syncSingleNote(note);
-    } catch (e) {
-      // Silently fail - Firestore sync is best-effort
-    }
   }
 
   void addNote(String content, {String? title, String? tags}) async {
@@ -53,10 +39,10 @@ class NoteListNotifier extends StateNotifier<List<Note>> {
       ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
       ..lastModified = DateTime.now();
 
-    await _box.add(note);
+    final docRef = await _notesCollection.add(note);
+    note.id = docRef.id;
+    
     state = [note, ...state];
-    await _triggerAutoSync();
-    _syncToFirestore(note);
   }
 
   void updateNote(
@@ -70,24 +56,22 @@ class NoteListNotifier extends StateNotifier<List<Note>> {
     note.tags =
         newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [];
     note.lastModified = DateTime.now();
-    await note.save();
+    
+    if (note.id != null) {
+      await _notesCollection.doc(note.id).set(note);
+    }
+    
     state = [
       for (final n in state)
-        if (n.key == note.key) note else n,
+        if (n.id == note.id) note else n,
     ];
-    await _triggerAutoSync();
-    _syncToFirestore(note);
   }
 
   void deleteNote(Note note) async {
-    await note.delete();
-    state = state.where((n) => n.key != note.key).toList();
-    await _triggerAutoSync();
-    
-    // Delete from Firestore
-    if (note.firestoreId != null) {
-      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
-      await firestoreSyncService.deleteNoteFromFirestore(note);
+    if (note.id != null) {
+      await _notesCollection.doc(note.id).delete();
     }
+    
+    state = state.where((n) => n.id != note.id).toList();
   }
 }

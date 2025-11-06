@@ -1,27 +1,17 @@
-import 'package:hive/hive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-part 'journal_entry.g.dart';
+class JournalEntry {
+  String? id;
 
-@HiveType(typeId: 2)
-class JournalEntry extends HiveObject {
-  @HiveField(0)
   late String body;
 
-  @HiveField(1)
   late DateTime creationDate;
 
-  @HiveField(2)
   List<String> imagePaths = [];
 
-  @HiveField(3)
   List<String> tags = [];
 
-  @HiveField(4)
   DateTime? lastModified; // Local timestamp for conflict resolution
-
-  // Firestore sync support
-  String? firestoreId; // Firestore document ID for syncing
 
   /// Create JournalEntry from Firestore document
   static JournalEntry fromFirestore(
@@ -29,7 +19,7 @@ class JournalEntry extends HiveObject {
   ) {
     final data = doc.data()!;
     final entry = JournalEntry();
-    entry.firestoreId = doc.id;
+    entry.id = doc.id;
     entry.body = data['body'] as String;
     entry.creationDate = (data['creationDate'] as Timestamp).toDate();
     entry.imagePaths = List<String>.from(data['imagePaths'] as List? ?? []);

@@ -1,47 +1,37 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/journal_entry.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:keystone/providers/sync_provider.dart';
-import 'package:keystone/providers/firestore_sync_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 final journalEntryListProvider =
     StateNotifierProvider<JournalEntryListNotifier, List<JournalEntry>>((ref) {
-      return JournalEntryListNotifier(ref);
-    });
+  return JournalEntryListNotifier(ref);
+});
 
 class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
-  final Box<JournalEntry> _box = Hive.box<JournalEntry>('journal_entries');
   final Ref _ref;
+  final CollectionReference<JournalEntry> _journalEntriesCollection;
 
-  JournalEntryListNotifier(this._ref) : super([]) {
+  JournalEntryListNotifier(this._ref)
+      : _journalEntriesCollection = FirebaseFirestore.instance
+            .collection('journal_entries')
+            .withConverter<JournalEntry>(
+              fromFirestore: (snapshot, _) =>
+                  JournalEntry.fromFirestore(snapshot),
+              toFirestore: (entry, _) => entry.toFirestore(),
+            ),
+        super([]) {
     _loadEntries();
   }
 
-  void _loadEntries() {
-    final entries = _box.values.toList();
-    entries.sort((a, b) => b.creationDate.compareTo(a.creationDate));
-    state = entries;
+  Future<void> _loadEntries() async {
+    final snapshot = await _journalEntriesCollection
+        .orderBy('creationDate', descending: true)
+        .get();
+    state = snapshot.docs.map((doc) => doc.data()).toList();
   }
 
   void reload() {
     _loadEntries();
-  }
-
-  Future<void> _triggerAutoSync() async {
-    try {
-      await _ref.read(syncNotifierProvider.notifier).changeSync();
-    } catch (e) {
-      // Silently fail - auto-sync is best-effort
-    }
-  }
-
-  void _syncToFirestore(JournalEntry entry) {
-    try {
-      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
-      firestoreSyncService.syncSingleJournalEntry(entry);
-    } catch (e) {
-      // Silently fail - Firestore sync is best-effort
-    }
   }
 
   void addJournalEntry(
@@ -56,10 +46,10 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
       ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
       ..lastModified = DateTime.now();
 
-    await _box.add(entry);
+    final docRef = await _journalEntriesCollection.add(entry);
+    entry.id = docRef.id;
+    
     state = [entry, ...state];
-    await _triggerAutoSync();
-    _syncToFirestore(entry);
   }
 
   void updateJournalEntry(
@@ -71,36 +61,36 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
     entry.tags =
         newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [];
     entry.lastModified = DateTime.now();
-    await entry.save();
+    
+    if (entry.id != null) {
+      await _journalEntriesCollection.doc(entry.id).set(entry);
+    }
+    
     state = [
       for (final e in state)
-        if (e.key == entry.key) entry else e,
+        if (e.id == entry.id) entry else e,
     ];
-    await _triggerAutoSync();
-    _syncToFirestore(entry);
   }
 
   void addImageToJournalEntry(JournalEntry entry, String imagePath) async {
     entry.imagePaths.add(imagePath);
     entry.lastModified = DateTime.now();
-    await entry.save();
+    
+    if (entry.id != null) {
+      await _journalEntriesCollection.doc(entry.id).set(entry);
+    }
+    
     state = [
       for (final e in state)
-        if (e.key == entry.key) entry else e,
+        if (e.id == entry.id) entry else e,
     ];
-    await _triggerAutoSync();
-    _syncToFirestore(entry);
   }
 
   void deleteJournalEntry(JournalEntry entry) async {
-    await entry.delete();
-    state = state.where((e) => e.key != entry.key).toList();
-    await _triggerAutoSync();
-    
-    // Delete from Firestore
-    if (entry.firestoreId != null) {
-      final firestoreSyncService = _ref.read(firestoreSyncServiceProvider);
-      await firestoreSyncService.deleteJournalEntryFromFirestore(entry);
+    if (entry.id != null) {
+      await _journalEntriesCollection.doc(entry.id).delete();
     }
+    
+    state = state.where((e) => e.id != entry.id).toList();
   }
 }

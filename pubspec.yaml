@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.1+3
+version: 1.2.0+4
 
 environment:
   sdk: ^3.9.2
@@ -35,8 +35,6 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^2.6.1
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   flutter_markdown_plus: ^1.0.5
   image_picker: ^1.1.2
@@ -46,7 +44,7 @@ dependencies:
   cloud_firestore: ^6.0.3
   firebase_auth: ^6.1.1
   # Google Sign-In (keep for Firebase Auth)
-  google_sign_in: ^6.2.2
+  google_sign_in: ^6.1.5
   # Legacy Google Drive (will be phased out)
   googleapis: ^15.0.0
   http: ^1.2.2
@@ -62,8 +60,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  hive_generator: ^2.0.1
-  build_runner: ^2.4.13
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

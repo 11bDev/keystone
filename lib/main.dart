@@ -1,22 +1,18 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:keystone/features/landing/landing_page.dart';
+import 'package:keystone/providers/auth_provider.dart';
 import 'firebase_options.dart';
 import 'package:keystone/features/calendar/calendar_screen.dart';
 import 'package:keystone/features/journal/journal_tab.dart';
 import 'package:keystone/features/notes/notes_tab.dart';
 import 'package:keystone/features/tasks/tasks_tab.dart';
-import 'package:keystone/models/journal_entry.dart';
-import 'package:keystone/models/note.dart';
-import 'package:keystone/models/task.dart';
-import 'package:keystone/models/sync_log_entry.dart';
 import 'package:keystone/features/search/search_screen.dart';
 import 'package:keystone/features/settings/settings_screen.dart';
 import 'package:keystone/providers/theme_provider.dart';
-import 'package:keystone/providers/sync_provider.dart';
-import 'package:keystone/providers/firestore_sync_provider.dart';
 import 'package:keystone/services/notification_service.dart';
 
 final notificationService = NotificationService();
@@ -44,19 +40,8 @@ final firebaseInitializerProvider = FutureProvider<FirebaseApp?>((ref) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Hive for local storage
+  // Initialize notification service
   await notificationService.init();
-  await Hive.initFlutter();
-  Hive.registerAdapter(TaskAdapter());
-  Hive.registerAdapter(NoteAdapter());
-  Hive.registerAdapter(JournalEntryAdapter());
-  Hive.registerAdapter(SyncLogEntryAdapter());
-
-  await Hive.openBox<Task>('tasks');
-  await Hive.openBox<Note>('notes');
-  await Hive.openBox<JournalEntry>('journal_entries');
-  await Hive.openBox<SyncLogEntry>('sync_log');
-  await Hive.openBox('settings');
 
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -87,15 +72,44 @@ class MyApp extends ConsumerWidget {
             // Firebase initialization returned null (failed gracefully)
             print('ℹ️ Running in local-only mode (Firebase unavailable)');
           }
-          return const MainScreenWrapper();
+          return AuthWrapper();
         },
         loading: () => const SplashScreen(message: 'Initializing...'),
         error: (error, stackTrace) {
           // Firebase failed to initialize with an error. The app will run without Firebase features.
           print('⚠️ Firebase initialization error: $error');
           // The flag remains false.
-          return const MainScreenWrapper();
+          return AuthWrapper();
         },
+      ),
+    );
+  }
+}
+
+class AuthWrapper extends ConsumerWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateChangesProvider);
+
+    return authState.when(
+      data: (user) {
+        if (user != null) {
+          return const MainScreenWrapper();
+        } else {
+          if (kIsWeb) {
+            return const LandingPage();
+          } else {
+            return const MainScreenWrapper(); // Or a mobile-specific login screen
+          }
+        }
+      },
+      loading: () => const SplashScreen(message: 'Authenticating...'),
+      error: (error, stack) => Scaffold(
+        body: Center(
+          child: Text('Authentication Error: $error'),
+        ),
       ),
     );
   }
@@ -138,13 +152,10 @@ class _MainScreenWrapperState extends ConsumerState<MainScreenWrapper> {
     super.initState();
     // Trigger startup sync operations after the first frame is built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Google Drive sync (legacy)
-      ref.read(syncNotifierProvider.notifier).startupSync();
-      
-      // Firestore sync - only if Firebase is available
+      // Firestore sync
       final isFirebaseAvailable = ref.read(isFirebaseAvailableProvider);
       if (isFirebaseAvailable) {
-        ref.read(startupSyncProvider);
+        // ref.read(startupSyncProvider);
       } else {
         print('ℹ️ Skipping Firestore sync (Firebase unavailable on this platform)');
       }
@@ -182,72 +193,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
     super.dispose();
   }
 
-  Widget _buildSyncStatusIcon(SyncStatusData status) {
-    IconData icon;
-    Color color;
-    String tooltip;
-    
-    switch (status.status) {
-      case SyncStatus.syncing:
-        icon = Icons.sync;
-        color = Colors.blue;
-        tooltip = 'Syncing...';
-        break;
-      case SyncStatus.success:
-        icon = Icons.cloud_done;
-        color = Colors.green;
-        tooltip = status.lastSyncTime != null
-            ? 'Synced ${_formatSyncTime(status.lastSyncTime!)}'
-            : 'Synced';
-        break;
-      case SyncStatus.error:
-        icon = Icons.cloud_off;
-        color = Colors.red;
-        tooltip = status.message;
-        break;
-      case SyncStatus.idle:
-        icon = Icons.cloud_outlined;
-        color = Colors.grey;
-        tooltip = 'Not synced';
-        break;
-    }
-    
-    return Tooltip(
-      message: tooltip,
-      child: Icon(
-        icon,
-        size: 18,
-        color: color,
-      ),
-    );
-  }
-
-  String _formatSyncTime(DateTime syncTime) {
-    final now = DateTime.now();
-    final difference = now.difference(syncTime);
-    
-    if (difference.inSeconds < 60) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final syncStatus = ref.watch(syncStatusProvider);
-    
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
             const Text('Keystone'),
-            const SizedBox(width: 12),
-            _buildSyncStatusIcon(syncStatus),
           ],
         ),
         actions: [

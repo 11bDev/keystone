@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:keystone/models/task.dart';
 import 'package:keystone/providers/task_provider.dart';
-import 'package:keystone/providers/sync_provider.dart';
 
 class TasksTab extends ConsumerStatefulWidget {
   const TasksTab({super.key});
@@ -642,17 +641,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
     );
     DateTime? dueDate = task?.dueDate ?? DateTime.now();
     String category = task?.category ?? 'task'; // Default to 'task'
-    bool addToGoogleCalendar = false; // Default: don't add to Google Calendar
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final syncService = ref.read(syncServiceProvider);
-            final isSignedIn = syncService.isSignedIn;
-            final showGoogleCalendarOption = category == 'event' && isSignedIn;
-
             return Dialog(
               insetPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -690,10 +684,6 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                               onSelectionChanged: (newSelection) {
                                 setState(() {
                                   category = newSelection.first;
-                                  // Reset checkbox if switching away from event
-                                  if (category != 'event') {
-                                    addToGoogleCalendar = false;
-                                  }
                                 });
                               },
                             ),
@@ -763,22 +753,6 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                 ),
                               ],
                             ),
-                            if (showGoogleCalendarOption) ...[
-                              const SizedBox(height: 16),
-                              CheckboxListTile(
-                                title: const Text('Add to Google Calendar'),
-                                subtitle: const Text(
-                                  'Sync this event to your Google Calendar',
-                                ),
-                                value: addToGoogleCalendar,
-                                onChanged: (value) {
-                                  setState(() {
-                                    addToGoogleCalendar = value ?? false;
-                                  });
-                                },
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ],
                           ],
                         ),
                       ),
@@ -809,36 +783,6 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                       ? null
                                       : noteController.text;
 
-                                // Add to Google Calendar if requested
-                                if (addToGoogleCalendar &&
-                                    category == 'event') {
-                                  final calendarService =
-                                      syncService.calendarService;
-                                  final eventId = await calendarService
-                                      .addEventToCalendar(newTask);
-                                  if (eventId != null) {
-                                    newTask.googleCalendarEventId = eventId;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Event added to Google Calendar',
-                                        ),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Failed to add to Google Calendar',
-                                        ),
-                                        backgroundColor: Colors.orange,
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  }
-                                }
-
                                 ref
                                     .read(taskListProvider.notifier)
                                     .addTaskObject(newTask);
@@ -856,17 +800,6 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                           ? null
                                           : noteController.text,
                                     );
-
-                                // Update in Google Calendar if it was synced
-                                if (task.googleCalendarEventId != null &&
-                                    category == 'event') {
-                                  final calendarService =
-                                      syncService.calendarService;
-                                  await calendarService.updateEventInCalendar(
-                                    task.googleCalendarEventId!,
-                                    task,
-                                  );
-                                }
                               }
                               Navigator.pop(context);
                             }
