@@ -35,7 +35,8 @@ class _LoginFormState extends ConsumerState<LoginForm> {
               email: _emailController.text.trim(),
               password: _passwordController.text.trim(),
             );
-        if (mounted) Navigator.of(context).pop();
+        // Use root navigator to ensure proper navigation on mobile
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
       } catch (e) {
         setState(() {
           _errorMessage = e.toString();
@@ -61,7 +62,8 @@ class _LoginFormState extends ConsumerState<LoginForm> {
               email: _emailController.text.trim(),
               password: _passwordController.text.trim(),
             );
-        if (mounted) Navigator.of(context).pop();
+        // Use root navigator to ensure proper navigation on mobile
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
       } catch (e) {
         setState(() {
           _errorMessage = e.toString();
@@ -84,8 +86,8 @@ class _LoginFormState extends ConsumerState<LoginForm> {
     try {
       final user = await ref.read(authServiceProvider).signInWithGoogle();
       if (mounted && user != null) {
-        // Close dialog if we're in one, but only if sign-in succeeded
-        Navigator.of(context).pop();
+        // Use root navigator to ensure proper navigation on mobile
+        Navigator.of(context, rootNavigator: true).pop();
       }
     } catch (e) {
       setState(() {
