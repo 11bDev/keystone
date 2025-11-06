@@ -13,10 +13,24 @@ class TasksTab extends ConsumerStatefulWidget {
 
 class _TasksTabState extends ConsumerState<TasksTab> {
   int _viewIndex = 0; // 0: Today, 1: Week, 2: Month, 3: Future
+  Offset _tapPosition = Offset.zero;
 
   @override
   Widget build(BuildContext context) {
-    final tasks = ref.watch(taskListProvider);
+    final tasksAsync = ref.watch(taskListProvider);
+    
+    return tasksAsync.when(
+      data: (tasks) => _buildContent(context, tasks),
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        body: Center(child: Text('Error loading tasks: $error')),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, List<Task> tasks) {
     Widget body;
 
     if (_viewIndex < 3) {
@@ -443,116 +457,176 @@ class _TasksTabState extends ConsumerState<TasksTab> {
             color: Theme.of(context).colorScheme.primary,
           );
         }
-        titleStyle = const TextStyle(fontSize: 18);
         break;
     }
 
-    return ListTile(
-      leading: leading,
-      title: Text(task.text, style: titleStyle),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Show date in month view
-          if (_viewIndex == 2)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4.0),
-              child: Text(
-                '${_getDayName(task.dueDate.weekday)} ${task.dueDate.month}/${task.dueDate.day}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          if (task.tags.isNotEmpty)
-            Text(
-              task.tags.join(' '),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          if (task.note != null && task.note!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                task.note!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.color?.withOpacity(0.8),
-                  fontStyle: FontStyle.italic,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-      ),
-      trailing: isInteractive
-          ? PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'edit') {
-                  _showAddTaskDialog(context, ref, task: task);
-                } else if (value == 'migrate') {
-                  _showMigrateDialog(context, ref, task);
-                } else if (value == 'cancel') {
-                  ref.read(taskListProvider.notifier).cancelTask(task);
-                } else if (value == 'uncancel') {
-                  ref.read(taskListProvider.notifier).uncancelTask(task);
-                } else if (value == 'delete') {
-                  ref.read(taskListProvider.notifier).deleteTask(task);
-                }
-              },
-              itemBuilder: (BuildContext context) {
-                return <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(
-                    value: 'edit',
-                    child: Text('Edit'),
-                  ),
-                  // Show Migrate only for pending tasks
-                  if (task.status == 'pending')
-                    const PopupMenuItem<String>(
-                      value: 'migrate',
-                      child: Text('Migrate'),
-                    ),
-                  // Show Cancel only for pending tasks
-                  if (task.status == 'pending')
-                    const PopupMenuItem<String>(
-                      value: 'cancel',
-                      child: Text('Cancel'),
-                    ),
-                  // Show Undo Cancel only for canceled tasks
-                  if (task.status == 'canceled')
-                    const PopupMenuItem<String>(
-                      value: 'uncancel',
-                      child: Text('Undo Cancel'),
-                    ),
-                  const PopupMenuItem<String>(
-                    value: 'delete',
-                    child: Text('Delete'),
-                  ),
-                ];
-              },
-            )
-          : null,
+    return GestureDetector(
+      onTapDown: (TapDownDetails details) {
+        // Store tap position for context menu
+        _tapPosition = details.globalPosition;
+      },
       onTap: isInteractive
           ? () {
-              ref.read(taskListProvider.notifier).toggleTaskStatus(task);
-            }
-          : null,
-      onLongPress: isInteractive
-          ? () {
+              // Click anywhere on item (except leading icon) opens context menu
               _showTaskContextMenu(context, ref, task);
             }
           : null,
+      child: ListTile(
+        leading: GestureDetector(
+          onTap: isInteractive
+              ? () async {
+                  // Only icon click toggles task status
+                  final taskService = ref.read(taskServiceProvider);
+                  if (taskService != null) {
+                    await taskService.toggleTaskStatus(task.id!, task.status);
+                  }
+                }
+              : null,
+          child: leading,
+        ),
+        title: Text(task.text, style: titleStyle),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Show date in month view
+            if (_viewIndex == 2)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4.0),
+                child: Text(
+                  '${_getDayName(task.dueDate.weekday)} ${task.dueDate.month}/${task.dueDate.day}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            if (task.tags.isNotEmpty)
+              Text(
+                task.tags.join(' '),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            if (task.note != null && task.note!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  task.note!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.color?.withOpacity(0.8),
+                    fontStyle: FontStyle.italic,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
   void _showTaskContextMenu(BuildContext context, WidgetRef ref, Task task) {
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    
+    showMenu(
+      context: context,
+      position: RelativeRect.fromRect(
+        _tapPosition & const Size(40, 40),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem<String>(
+          value: 'toggle',
+          child: ListTile(
+            leading: Icon(Icons.check_circle_outline),
+            title: Text('Toggle Status'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'edit',
+          child: ListTile(
+            leading: Icon(Icons.edit),
+            title: Text('Edit'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        // Show Migrate only for pending tasks
+        if (task.status == 'pending')
+          const PopupMenuItem<String>(
+            value: 'migrate',
+            child: ListTile(
+              leading: Icon(Icons.chevron_right),
+              title: Text('Migrate'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        // Show Cancel only for pending tasks
+        if (task.status == 'pending')
+          const PopupMenuItem<String>(
+            value: 'cancel',
+            child: ListTile(
+              leading: Icon(Icons.block),
+              title: Text('Cancel'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        // Show Undo Cancel only for canceled tasks
+        if (task.status == 'canceled')
+          const PopupMenuItem<String>(
+            value: 'uncancel',
+            child: ListTile(
+              leading: Icon(Icons.undo),
+              title: Text('Undo Cancel'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          child: ListTile(
+            leading: Icon(Icons.delete, color: Colors.red),
+            title: Text('Delete', style: TextStyle(color: Colors.red)),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == null) return;
+      
+      final taskService = ref.read(taskServiceProvider);
+      if (taskService == null) return;
+      
+      switch (value) {
+        case 'toggle':
+          await taskService.toggleTaskStatus(task.id!, task.status);
+          break;
+        case 'edit':
+          _showAddTaskDialog(context, ref, task: task);
+          break;
+        case 'migrate':
+          _showMigrateDialog(context, ref, task);
+          break;
+        case 'cancel':
+          await taskService.cancelTask(task.id!);
+          break;
+        case 'uncancel':
+          await taskService.uncancelTask(task.id!);
+          break;
+        case 'delete':
+          await taskService.deleteTask(task.id!);
+          break;
+      }
+    });
+  }
+
+  // Old modal bottom sheet version - kept for reference, can be removed
+  void _showTaskContextMenuOld(BuildContext context, WidgetRef ref, Task task) {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -583,9 +657,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                 ListTile(
                   leading: const Icon(Icons.block),
                   title: const Text('Cancel'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    ref.read(taskListProvider.notifier).cancelTask(task);
+                    final taskService = ref.read(taskServiceProvider);
+                    if (taskService != null) {
+                      await taskService.cancelTask(task.id!);
+                    }
                   },
                 ),
               // Show Undo Cancel only for canceled tasks
@@ -593,17 +670,23 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                 ListTile(
                   leading: const Icon(Icons.undo),
                   title: const Text('Undo Cancel'),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    ref.read(taskListProvider.notifier).uncancelTask(task);
+                    final taskService = ref.read(taskServiceProvider);
+                    if (taskService != null) {
+                      await taskService.uncancelTask(task.id!);
+                    }
                   },
                 ),
               ListTile(
                 leading: const Icon(Icons.delete),
                 title: const Text('Delete'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  ref.read(taskListProvider.notifier).deleteTask(task);
+                  final taskService = ref.read(taskServiceProvider);
+                  if (taskService != null) {
+                    await taskService.deleteTask(task.id!);
+                  }
                 },
               ),
             ],
@@ -625,7 +708,10 @@ class _TasksTabState extends ConsumerState<TasksTab> {
       lastDate: DateTime(2030),
     );
     if (newDate != null) {
-      ref.read(taskListProvider.notifier).migrateTask(task, newDate);
+      final taskService = ref.read(taskServiceProvider);
+      if (taskService != null) {
+        taskService.migrateTask(task.id!, newDate);
+      }
     }
   }
 
@@ -769,39 +855,34 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                         FilledButton(
                           onPressed: () async {
                             if (controller.text.isNotEmpty) {
-                              if (task == null) {
-                                // Adding new task
-                                final newTask = Task()
-                                  ..text = controller.text
-                                  ..tags = tagsController.text
-                                      .split(' ')
-                                      .where((tag) => tag.isNotEmpty)
-                                      .toList()
-                                  ..dueDate = dueDate!
-                                  ..category = category
-                                  ..note = noteController.text.isEmpty
-                                      ? null
-                                      : noteController.text;
-
-                                ref
-                                    .read(taskListProvider.notifier)
-                                    .addTaskObject(newTask);
-                              } else {
-                                // Updating existing task
-                                ref
-                                    .read(taskListProvider.notifier)
-                                    .updateTask(
-                                      task,
-                                      controller.text,
-                                      tagsController.text,
-                                      dueDate: dueDate,
-                                      category: category,
-                                      note: noteController.text.isEmpty
-                                          ? null
-                                          : noteController.text,
-                                    );
+                              final taskService = ref.read(taskServiceProvider);
+                              if (taskService != null) {
+                                if (task == null) {
+                                  // Adding new task
+                                  await taskService.addTask(
+                                    controller.text,
+                                    tags: tagsController.text,
+                                    dueDate: dueDate,
+                                    category: category,
+                                    note: noteController.text.isEmpty
+                                        ? null
+                                        : noteController.text,
+                                  );
+                                } else {
+                                  // Updating existing task
+                                  await taskService.updateTask(
+                                    task.id!,
+                                    controller.text,
+                                    tagsController.text,
+                                    dueDate: dueDate,
+                                    category: category,
+                                    note: noteController.text.isEmpty
+                                        ? null
+                                        : noteController.text,
+                                  );
+                                }
+                                Navigator.pop(context);
                               }
-                              Navigator.pop(context);
                             }
                           },
                           child: Text(task == null ? 'Add' : 'Save'),

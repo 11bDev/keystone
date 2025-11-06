@@ -111,9 +111,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(searchQueryProvider);
-    final tasks = ref.watch(taskListProvider);
-    final notes = ref.watch(noteListProvider);
-    final journalEntries = ref.watch(journalEntryListProvider);
+    final tasksAsync = ref.watch(taskListProvider);
+    final notesAsync = ref.watch(noteListProvider);
+    final journalEntriesAsync = ref.watch(journalEntryListProvider);
+
+    // Extract data from AsyncValue or use empty lists
+    final tasks = tasksAsync.asData?.value ?? [];
+    final notes = notesAsync.asData?.value ?? [];
+    final journalEntries = journalEntriesAsync.asData?.value ?? [];
 
     // Filter and score results
     List<({Task item, double score, String matchType})> scoredTasks = [];

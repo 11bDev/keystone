@@ -13,6 +13,7 @@ import 'package:keystone/features/notes/notes_tab.dart';
 import 'package:keystone/features/tasks/tasks_tab.dart';
 import 'package:keystone/features/search/search_screen.dart';
 import 'package:keystone/features/settings/settings_screen.dart';
+import 'package:keystone/features/lists/lists_screen.dart';
 import 'package:keystone/providers/theme_provider.dart';
 import 'package:keystone/services/notification_service.dart';
 
@@ -226,6 +227,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
                 MaterialPageRoute(builder: (context) => const CalendarScreen()),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.check_box),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ListsScreen()),
+              );
+            },
+            tooltip: 'Lists',
           ),
           IconButton(
             icon: const Icon(Icons.search),

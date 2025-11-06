@@ -6,52 +6,57 @@ import 'package:keystone/features/journal/journal_detail_screen.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:keystone/providers/journal_provider.dart';
 
-class JournalTab extends ConsumerWidget {
+class JournalTab extends ConsumerStatefulWidget {
   const JournalTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(journalEntryListProvider);
+  ConsumerState<JournalTab> createState() => _JournalTabState();
+}
 
-    return Scaffold(
-      body: ListView.builder(
-        itemCount: entries.length,
-        itemBuilder: (context, index) {
-          final entry = entries[index];
+class _JournalTabState extends ConsumerState<JournalTab> {
+  Offset _tapPosition = Offset.zero;
+
+  @override
+  Widget build(BuildContext context) {
+    final entriesAsync = ref.watch(journalEntryListProvider);
+
+    return entriesAsync.when(
+      data: (entries) => Scaffold(
+        body: ListView.builder(
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
           return Tooltip(
             message: entry.body,
-            child: ListTile(
-              title: Text(
-                DateFormat('d MMM yyyy, hh:mm a').format(entry.creationDate),
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (entry.tags.isNotEmpty)
-                    Text(
-                      entry.tags.join(' '),
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                ],
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => JournalDetailScreen(entry: entry),
-                  ),
-                );
+            child: GestureDetector(
+              onTapDown: (TapDownDetails details) {
+                // Store tap position for context menu
+                _tapPosition = details.globalPosition;
               },
-              onLongPress: () =>
-                  _showJournalEntryDialog(context, ref, entry: entry),
+              onTap: () => _showJournalContextMenu(context, ref, entry),
+              child: ListTile(
+                title: Text(
+                  DateFormat('d MMM yyyy, hh:mm a').format(entry.creationDate),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.body,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (entry.tags.isNotEmpty)
+                      Text(
+                        entry.tags.join(' '),
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           );
         },
@@ -60,7 +65,98 @@ class JournalTab extends ConsumerWidget {
         onPressed: () => _showJournalEntryDialog(context, ref),
         child: const Icon(Icons.add),
       ),
-    );
+    ),
+    loading: () => const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    ),
+    error: (error, stack) => Scaffold(
+      body: Center(child: Text('Error loading journal entries: $error')),
+    ),
+  );
+}
+
+  void _showJournalContextMenu(BuildContext context, WidgetRef ref, JournalEntry entry) {
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    
+    showMenu(
+      context: context,
+      position: RelativeRect.fromRect(
+        _tapPosition & const Size(40, 40),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem<String>(
+          value: 'view',
+          child: ListTile(
+            leading: Icon(Icons.visibility),
+            title: Text('View Details'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'edit',
+          child: ListTile(
+            leading: Icon(Icons.edit),
+            title: Text('Edit'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          child: ListTile(
+            leading: Icon(Icons.delete, color: Colors.red),
+            title: Text('Delete', style: TextStyle(color: Colors.red)),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == null) return;
+      
+      switch (value) {
+        case 'view':
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => JournalDetailScreen(entry: entry),
+            ),
+          );
+          break;
+        case 'edit':
+          _showJournalEntryDialog(context, ref, entry: entry);
+          break;
+        case 'delete':
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Delete Journal Entry'),
+              content: const Text(
+                'Are you sure you want to delete this journal entry?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (confirm == true) {
+            final journalService = ref.read(journalServiceProvider);
+            if (journalService != null && entry.id != null) {
+              await journalService.deleteJournalEntry(entry.id!);
+            }
+          }
+          break;
+      }
+    });
   }
 
   void _showJournalEntryDialog(
@@ -119,14 +215,13 @@ class JournalTab extends ConsumerWidget {
                             final pickedFile = await picker.pickImage(
                               source: ImageSource.gallery,
                             );
-                            if (pickedFile != null) {
-                              if (entry != null) {
-                                ref
-                                    .read(journalEntryListProvider.notifier)
-                                    .addImageToJournalEntry(
-                                      entry,
-                                      pickedFile.path,
-                                    );
+                            if (pickedFile != null && entry != null && entry.id != null) {
+                              final journalService = ref.read(journalServiceProvider);
+                              if (journalService != null) {
+                                await journalService.addImageToJournalEntry(
+                                  entry.id!,
+                                  pickedFile.path,
+                                );
                               }
                             }
                           },
@@ -148,11 +243,12 @@ class JournalTab extends ConsumerWidget {
                     if (entry != null) ...[
                       const SizedBox(width: 8),
                       TextButton(
-                        onPressed: () {
-                          ref
-                              .read(journalEntryListProvider.notifier)
-                              .deleteJournalEntry(entry);
-                          Navigator.pop(context);
+                        onPressed: () async {
+                          final journalService = ref.read(journalServiceProvider);
+                          if (journalService != null && entry.id != null) {
+                            await journalService.deleteJournalEntry(entry.id!);
+                            Navigator.pop(context);
+                          }
                         },
                         child: const Text(
                           'Delete',
@@ -162,25 +258,24 @@ class JournalTab extends ConsumerWidget {
                     ],
                     const SizedBox(width: 8),
                     FilledButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (bodyController.text.isNotEmpty) {
-                          if (entry == null) {
-                            ref
-                                .read(journalEntryListProvider.notifier)
-                                .addJournalEntry(
-                                  bodyController.text,
-                                  tags: tagsController.text,
-                                );
-                          } else {
-                            ref
-                                .read(journalEntryListProvider.notifier)
-                                .updateJournalEntry(
-                                  entry,
-                                  bodyController.text,
-                                  newTags: tagsController.text,
-                                );
+                          final journalService = ref.read(journalServiceProvider);
+                          if (journalService != null) {
+                            if (entry == null) {
+                              await journalService.addJournalEntry(
+                                bodyController.text,
+                                tags: tagsController.text,
+                              );
+                            } else if (entry.id != null) {
+                              await journalService.updateJournalEntry(
+                                entry.id!,
+                                bodyController.text,
+                                newTags: tagsController.text,
+                              );
+                            }
+                            Navigator.pop(context);
                           }
-                          Navigator.pop(context);
                         }
                       },
                       child: Text(entry == null ? 'Add' : 'Save'),

@@ -1,40 +1,53 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/journal_entry.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-final journalEntryListProvider =
-    StateNotifierProvider<JournalEntryListNotifier, List<JournalEntry>>((ref) {
-  return JournalEntryListNotifier(ref);
+// Provider for Firestore instance
+final firestoreProvider = Provider<FirebaseFirestore>((ref) {
+  return FirebaseFirestore.instance;
 });
 
-class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
-  final Ref _ref;
-  final CollectionReference<JournalEntry> _journalEntriesCollection;
+// Provider for current user
+final currentUserProvider = StreamProvider<User?>((ref) {
+  return FirebaseAuth.instance.authStateChanges();
+});
 
-  JournalEntryListNotifier(this._ref)
-      : _journalEntriesCollection = FirebaseFirestore.instance
-            .collection('journal_entries')
-            .withConverter<JournalEntry>(
-              fromFirestore: (snapshot, _) =>
-                  JournalEntry.fromFirestore(snapshot),
-              toFirestore: (entry, _) => entry.toFirestore(),
-            ),
-        super([]) {
-    _loadEntries();
-  }
+// Stream provider for journal entries
+final journalEntryListProvider = StreamProvider<List<JournalEntry>>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  final userAsync = ref.watch(currentUserProvider);
+  
+  return userAsync.when(
+    data: (user) {
+      if (user == null) return Stream.value([]);
+      
+      return firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('journal_entries')
+          .orderBy('creationDate', descending: true)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => JournalEntry.fromFirestore(doc))
+              .toList());
+    },
+    loading: () => Stream.value([]),
+    error: (_, __) => Stream.value([]),
+  );
+});
 
-  Future<void> _loadEntries() async {
-    final snapshot = await _journalEntriesCollection
-        .orderBy('creationDate', descending: true)
-        .get();
-    state = snapshot.docs.map((doc) => doc.data()).toList();
-  }
+// Service class for journal operations
+class JournalService {
+  final FirebaseFirestore _firestore;
+  final String _userId;
 
-  void reload() {
-    _loadEntries();
-  }
+  JournalService(this._firestore, this._userId);
 
-  void addJournalEntry(
+  CollectionReference<Map<String, dynamic>> get _journalEntriesCollection =>
+      _firestore.collection('users').doc(_userId).collection('journal_entries');
+
+  Future<void> addJournalEntry(
     String body, {
     List<String>? imagePaths,
     String? tags,
@@ -46,51 +59,41 @@ class JournalEntryListNotifier extends StateNotifier<List<JournalEntry>> {
       ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
       ..lastModified = DateTime.now();
 
-    final docRef = await _journalEntriesCollection.add(entry);
-    entry.id = docRef.id;
-    
-    state = [entry, ...state];
+    await _journalEntriesCollection.add(entry.toFirestore());
   }
 
-  void updateJournalEntry(
-    JournalEntry entry,
+  Future<void> updateJournalEntry(
+    String entryId,
     String newBody, {
     String? newTags,
   }) async {
-    entry.body = newBody;
-    entry.tags =
-        newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [];
-    entry.lastModified = DateTime.now();
-    
-    if (entry.id != null) {
-      await _journalEntriesCollection.doc(entry.id).set(entry);
-    }
-    
-    state = [
-      for (final e in state)
-        if (e.id == entry.id) entry else e,
-    ];
+    await _journalEntriesCollection.doc(entryId).update({
+      'body': newBody,
+      'tags': newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [],
+      'lastModified': FieldValue.serverTimestamp(),
+    });
   }
 
-  void addImageToJournalEntry(JournalEntry entry, String imagePath) async {
-    entry.imagePaths.add(imagePath);
-    entry.lastModified = DateTime.now();
-    
-    if (entry.id != null) {
-      await _journalEntriesCollection.doc(entry.id).set(entry);
-    }
-    
-    state = [
-      for (final e in state)
-        if (e.id == entry.id) entry else e,
-    ];
+  Future<void> addImageToJournalEntry(String entryId, String imagePath) async {
+    await _journalEntriesCollection.doc(entryId).update({
+      'imagePaths': FieldValue.arrayUnion([imagePath]),
+      'lastModified': FieldValue.serverTimestamp(),
+    });
   }
 
-  void deleteJournalEntry(JournalEntry entry) async {
-    if (entry.id != null) {
-      await _journalEntriesCollection.doc(entry.id).delete();
-    }
-    
-    state = state.where((e) => e.id != entry.id).toList();
+  Future<void> deleteJournalEntry(String entryId) async {
+    await _journalEntriesCollection.doc(entryId).delete();
   }
 }
+
+// Provider for journal service
+final journalServiceProvider = Provider<JournalService?>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  final userAsync = ref.watch(currentUserProvider);
+  
+  return userAsync.when(
+    data: (user) => user != null ? JournalService(firestore, user.uid) : null,
+    loading: () => null,
+    error: (_, __) => null,
+  );
+});

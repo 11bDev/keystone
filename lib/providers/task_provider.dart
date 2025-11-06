@@ -1,37 +1,53 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/task.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-final taskListProvider =
-    StateNotifierProvider<TaskListNotifier, List<Task>>((ref) {
-  return TaskListNotifier(ref);
+// Provider for Firestore instance
+final firestoreProvider = Provider<FirebaseFirestore>((ref) {
+  return FirebaseFirestore.instance;
 });
 
-class TaskListNotifier extends StateNotifier<List<Task>> {
-  final Ref _ref;
-  final CollectionReference<Task> _tasksCollection;
+// Provider for current user
+final currentUserProvider = StreamProvider<User?>((ref) {
+  return FirebaseAuth.instance.authStateChanges();
+});
 
-  TaskListNotifier(this._ref)
-      : _tasksCollection = FirebaseFirestore.instance
-            .collection('tasks')
-            .withConverter<Task>(
-              fromFirestore: (snapshot, _) => Task.fromFirestore(snapshot),
-              toFirestore: (task, _) => task.toFirestore(),
-            ),
-        super([]) {
-    _loadTasks();
-  }
+// Stream provider for tasks
+final taskListProvider = StreamProvider<List<Task>>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  final userAsync = ref.watch(currentUserProvider);
+  
+  return userAsync.when(
+    data: (user) {
+      if (user == null) return Stream.value([]);
+      
+      return firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .orderBy('dueDate', descending: false)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => Task.fromFirestore(doc))
+              .toList());
+    },
+    loading: () => Stream.value([]),
+    error: (_, __) => Stream.value([]),
+  );
+});
 
-  Future<void> _loadTasks() async {
-    final snapshot = await _tasksCollection.get();
-    state = snapshot.docs.map((doc) => doc.data()).toList();
-  }
+// Service class for task operations
+class TaskService {
+  final FirebaseFirestore _firestore;
+  final String _userId;
 
-  void reload() {
-    _loadTasks();
-  }
+  TaskService(this._firestore, this._userId);
 
-  void addTask(
+  CollectionReference<Map<String, dynamic>> get _tasksCollection =>
+      _firestore.collection('users').doc(_userId).collection('tasks');
+
+  Future<void> addTask(
     String text, {
     String? tags,
     DateTime? dueDate,
@@ -47,122 +63,103 @@ class TaskListNotifier extends StateNotifier<List<Task>> {
       ..status = 'pending'
       ..lastModified = DateTime.now();
 
-    final docRef = await _tasksCollection.add(task);
-    task.id = docRef.id;
-    
-    state = [...state, task];
+    await _tasksCollection.add(task.toFirestore());
   }
 
-  /// Add a pre-constructed Task object (useful for adding tasks with additional fields)
-  void addTaskObject(Task task) async {
+  Future<void> addTaskObject(Task task) async {
     task.lastModified = DateTime.now();
-    final docRef = await _tasksCollection.add(task);
-    task.id = docRef.id;
-    
-    state = [...state, task];
+    await _tasksCollection.add(task.toFirestore());
   }
 
-  void toggleTaskStatus(Task task) async {
-    task.status = task.status == 'pending' ? 'done' : 'pending';
-    task.lastModified = DateTime.now();
-    
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).set(task);
-    }
-    
-    state = [
-      for (final t in state)
-        if (t.id == task.id) task else t,
-    ];
+  Future<void> toggleTaskStatus(String taskId, String currentStatus) async {
+    final newStatus = currentStatus == 'pending' ? 'done' : 'pending';
+    await _tasksCollection.doc(taskId).update({
+      'status': newStatus,
+      'lastModified': FieldValue.serverTimestamp(),
+    });
   }
 
-  void updateTask(
-    Task task,
+  Future<void> updateTask(
+    String taskId,
     String newText,
     String newTags, {
     DateTime? dueDate,
     String? category,
     String? note,
   }) async {
-    task.text = newText;
-    task.tags = newTags.split(' ').where((t) => t.startsWith('#')).toList();
+    final updateData = <String, dynamic>{
+      'text': newText,
+      'tags': newTags.split(' ').where((t) => t.startsWith('#')).toList(),
+      'lastModified': FieldValue.serverTimestamp(),
+    };
+    
     if (dueDate != null) {
-      task.dueDate = dueDate;
+      updateData['dueDate'] = Timestamp.fromDate(dueDate);
     }
     if (category != null) {
-      task.category = category;
+      updateData['category'] = category;
     }
-    task.note = note;
-    task.lastModified = DateTime.now();
-    
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).set(task);
+    if (note != null) {
+      updateData['note'] = note;
     }
 
-    state = [
-      for (final t in state)
-        if (t.id == task.id) task else t,
-    ];
+    await _tasksCollection.doc(taskId).update(updateData);
   }
 
-  void migrateTask(Task task, DateTime newDueDate) async {
+  Future<void> migrateTask(String taskId, DateTime newDueDate) async {
+    // Get the original task
+    final taskDoc = await _tasksCollection.doc(taskId).get();
+    if (!taskDoc.exists) return;
+    
+    final taskData = taskDoc.data()!;
+    
     // Create a new task for the new date
     final newTask = Task()
-      ..text = task.text
+      ..text = taskData['text'] as String
       ..dueDate = newDueDate
-      ..tags = task.tags
-      ..category = task.category
-      ..note = task.note
+      ..tags = List<String>.from(taskData['tags'] as List? ?? [])
+      ..category = taskData['category'] as String? ?? 'task'
+      ..note = taskData['note'] as String?
       ..status = 'pending'
       ..lastModified = DateTime.now();
 
     // Update the original task's status to 'migrated'
-    task.status = 'migrated';
-    task.lastModified = DateTime.now();
-
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).set(task);
-    }
-    final newDocRef = await _tasksCollection.add(newTask);
-    newTask.id = newDocRef.id;
-
-    // Update the state
-    state = [...state.where((t) => t.id != task.id), task, newTask];
+    await _tasksCollection.doc(taskId).update({
+      'status': 'migrated',
+      'lastModified': FieldValue.serverTimestamp(),
+    });
+    
+    // Add the new task
+    await _tasksCollection.add(newTask.toFirestore());
   }
 
-  void cancelTask(Task task) async {
-    task.status = 'canceled';
-    task.lastModified = DateTime.now();
-    
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).set(task);
-    }
-    
-    state = [
-      for (final t in state)
-        if (t.id == task.id) task else t,
-    ];
+  Future<void> cancelTask(String taskId) async {
+    await _tasksCollection.doc(taskId).update({
+      'status': 'canceled',
+      'lastModified': FieldValue.serverTimestamp(),
+    });
   }
 
-  void uncancelTask(Task task) async {
-    task.status = 'pending';
-    task.lastModified = DateTime.now();
-    
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).set(task);
-    }
-    
-    state = [
-      for (final t in state)
-        if (t.id == task.id) task else t,
-    ];
+  Future<void> uncancelTask(String taskId) async {
+    await _tasksCollection.doc(taskId).update({
+      'status': 'pending',
+      'lastModified': FieldValue.serverTimestamp(),
+    });
   }
 
-  void deleteTask(Task task) async {
-    if (task.id != null) {
-      await _tasksCollection.doc(task.id).delete();
-    }
-    
-    state = state.where((t) => t.id != task.id).toList();
+  Future<void> deleteTask(String taskId) async {
+    await _tasksCollection.doc(taskId).delete();
   }
 }
+
+// Provider for task service
+final taskServiceProvider = Provider<TaskService?>((ref) {
+  final firestore = ref.watch(firestoreProvider);
+  final userAsync = ref.watch(currentUserProvider);
+  
+  return userAsync.when(
+    data: (user) => user != null ? TaskService(firestore, user.uid) : null,
+    loading: () => null,
+    error: (_, __) => null,
+  );
+});
