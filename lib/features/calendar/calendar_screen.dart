@@ -8,6 +8,7 @@ import 'package:keystone/models/task.dart';
 import 'package:keystone/providers/journal_provider.dart';
 import 'package:keystone/providers/note_provider.dart';
 import 'package:keystone/providers/task_provider.dart';
+import 'package:keystone/widgets/app_navigation_actions.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -635,7 +636,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         : ListView(children: eventWidgets);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Calendar')),
+      appBar: AppBar(
+        title: const Text('Calendar'),
+        actions: const [
+          AppNavigationActions(currentRoute: '/calendar'),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           // Use side-by-side layout for wider screens (desktop/tablet)

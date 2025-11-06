@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/list.dart';
 import 'package:keystone/providers/list_provider.dart';
 import 'package:keystone/features/lists/list_detail_screen.dart';
+import 'package:keystone/widgets/app_navigation_actions.dart';
 
 class ListsScreen extends ConsumerStatefulWidget {
   const ListsScreen({super.key});
@@ -116,6 +117,9 @@ class _ListsScreenState extends ConsumerState<ListsScreen> with SingleTickerProv
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lists'),
+        actions: const [
+          AppNavigationActions(currentRoute: '/lists'),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

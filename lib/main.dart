@@ -11,11 +11,13 @@ import 'package:keystone/features/calendar/calendar_screen.dart';
 import 'package:keystone/features/journal/journal_tab.dart';
 import 'package:keystone/features/notes/notes_tab.dart';
 import 'package:keystone/features/tasks/tasks_tab.dart';
+import 'package:keystone/features/projects/projects_screen.dart';
 import 'package:keystone/features/search/search_screen.dart';
 import 'package:keystone/features/settings/settings_screen.dart';
 import 'package:keystone/features/lists/lists_screen.dart';
 import 'package:keystone/providers/theme_provider.dart';
 import 'package:keystone/services/notification_service.dart';
+import 'package:keystone/widgets/app_navigation_actions.dart';
 
 final notificationService = NotificationService();
 
@@ -218,44 +220,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
             const Text('Keystone'),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CalendarScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.check_box),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ListsScreen()),
-              );
-            },
-            tooltip: 'Lists',
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SearchScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
-            },
-          ),
+        actions: const [
+          AppNavigationActions(),
         ],
         bottom: TabBar(
           controller: _tabController,

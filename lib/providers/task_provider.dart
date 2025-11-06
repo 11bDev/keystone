@@ -57,7 +57,7 @@ class TaskService {
     final task = Task()
       ..text = text
       ..dueDate = dueDate ?? DateTime.now()
-      ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
+      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? []
       ..category = category
       ..note = note
       ..status = 'pending'
@@ -89,7 +89,7 @@ class TaskService {
   }) async {
     final updateData = <String, dynamic>{
       'text': newText,
-      'tags': newTags.split(' ').where((t) => t.startsWith('#')).toList(),
+      'tags': newTags.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList(),
       'lastModified': FieldValue.serverTimestamp(),
     };
     

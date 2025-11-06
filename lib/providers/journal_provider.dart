@@ -56,7 +56,7 @@ class JournalService {
       ..body = body
       ..creationDate = DateTime.now()
       ..imagePaths = imagePaths ?? []
-      ..tags = tags?.split(' ').where((t) => t.startsWith('#')).toList() ?? []
+      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? []
       ..lastModified = DateTime.now();
 
     await _journalEntriesCollection.add(entry.toFirestore());
@@ -69,7 +69,7 @@ class JournalService {
   }) async {
     await _journalEntriesCollection.doc(entryId).update({
       'body': newBody,
-      'tags': newTags?.split(' ').where((t) => t.startsWith('#')).toList() ?? [],
+      'tags': newTags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? [],
       'lastModified': FieldValue.serverTimestamp(),
     });
   }

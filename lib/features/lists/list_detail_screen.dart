@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/list.dart';
 import 'package:keystone/providers/list_provider.dart';
+import 'package:keystone/widgets/app_navigation_actions.dart';
 import 'package:intl/intl.dart';
 
 class ListDetailScreen extends ConsumerStatefulWidget {
@@ -242,6 +243,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       appBar: AppBar(
         title: Text(widget.list.title),
         actions: [
+          const AppNavigationActions(),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: _showEditListDialog,

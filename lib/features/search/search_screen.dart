@@ -8,6 +8,7 @@ import 'package:keystone/providers/task_provider.dart';
 import 'package:keystone/models/task.dart';
 import 'package:keystone/models/note.dart';
 import 'package:keystone/models/journal_entry.dart';
+import 'package:keystone/widgets/app_navigation_actions.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -248,6 +249,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Search'),
+        actions: const [
+          AppNavigationActions(currentRoute: '/search'),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(

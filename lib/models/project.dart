@@ -1,55 +1,58 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Simple project model for demonstrating Firestore offline-first sync
 class Project {
-  final String id;
-  final String name;
-  final bool isCompleted;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  String? id;
+
+  late String name;
+  String? description;
+  late DateTime createdAt;
+  DateTime? updatedAt;
 
   Project({
-    required this.id,
+    this.id,
     required this.name,
-    required this.isCompleted,
-    required this.createdAt,
-    required this.updatedAt,
-  });
+    this.description,
+    DateTime? createdAt,
+    this.updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
-  /// Create from Firestore document
-  factory Project.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  /// Create Project from Firestore document
+  static Project fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
     return Project(
       id: doc.id,
       name: data['name'] as String,
-      isCompleted: data['isCompleted'] as bool,
+      description: data['description'] as String?,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
+      updatedAt: data['updatedAt'] != null
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
-  /// Convert to Firestore document
+  /// Convert Project to Firestore document
   Map<String, dynamic> toFirestore() {
     return {
       'name': name,
-      'isCompleted': isCompleted,
+      'description': description,
       'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
+      'updatedAt': updatedAt != null
+          ? Timestamp.fromDate(updatedAt!)
+          : FieldValue.serverTimestamp(),
     };
   }
 
-  /// Create a copy with updated fields
   Project copyWith({
     String? id,
     String? name,
-    bool? isCompleted,
+    String? description,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
     return Project(
       id: id ?? this.id,
       name: name ?? this.name,
-      isCompleted: isCompleted ?? this.isCompleted,
+      description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -57,6 +60,6 @@ class Project {
 
   @override
   String toString() {
-    return 'Project(id: $id, name: $name, isCompleted: $isCompleted)';
+    return 'Project(id: $id, name: $name)';
   }
 }
