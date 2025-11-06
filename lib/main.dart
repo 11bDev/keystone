@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:keystone/features/landing/landing_page.dart';
+import 'package:keystone/features/auth/mode_selection_screen.dart';
 import 'package:keystone/providers/auth_provider.dart';
 import 'firebase_options.dart';
 import 'package:keystone/features/calendar/calendar_screen.dart';
@@ -92,16 +93,30 @@ class AuthWrapper extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateChangesProvider);
+    final selectedMode = ref.watch(appModeProvider);
 
     return authState.when(
       data: (user) {
         if (user != null) {
+          // User is authenticated - go to main app
           return const MainScreenWrapper();
         } else {
+          // User is not authenticated
+          // On web, always show landing page
           if (kIsWeb) {
             return const LandingPage();
           } else {
-            return const MainScreenWrapper(); // Or a mobile-specific login screen
+            // On mobile, check if user has selected a mode
+            if (selectedMode == null) {
+              // No mode selected yet - show selection screen
+              return const ModeSelectionScreen();
+            } else if (selectedMode == AppMode.localOnly) {
+              // Local only mode - go directly to app without auth
+              return const MainScreenWrapper();
+            } else {
+              // Cloud sync mode - show landing page for authentication
+              return const LandingPage();
+            }
           }
         }
       },

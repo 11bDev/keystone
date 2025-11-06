@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/features/auth/login_form.dart';
+import 'package:keystone/features/auth/mode_selection_screen.dart';
 import 'package:keystone/providers/auth_provider.dart';
 import 'package:keystone/providers/theme_provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -102,6 +103,138 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: Text(err.toString()),
                 ),
               ),
+            ),
+            const Divider(),
+          ],
+          // App Mode Section (Mobile only)
+          if (!kIsWeb) ...[
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Data Storage',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Builder(
+              builder: (context) {
+                final selectedMode = ref.watch(appModeProvider);
+                final authState = ref.watch(authStateChangesProvider);
+                final isSignedIn = authState.maybeWhen(
+                  data: (user) => user != null,
+                  orElse: () => false,
+                );
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    children: [
+                      RadioListTile<AppMode>(
+                        title: const Text('Local Only'),
+                        subtitle: const Text(
+                          'Keep all data on this device only',
+                        ),
+                        secondary: const Icon(Icons.phone_android),
+                        value: AppMode.localOnly,
+                        groupValue: selectedMode,
+                        onChanged: isSignedIn
+                            ? null // Disable if signed in
+                            : (value) {
+                                if (value != null) {
+                                  ref.read(appModeProvider.notifier).state = value;
+                                }
+                              },
+                      ),
+                      const Divider(height: 1),
+                      RadioListTile<AppMode>(
+                        title: const Text('Cloud Sync'),
+                        subtitle: Text(
+                          isSignedIn
+                              ? 'Currently syncing with cloud'
+                              : 'Sign in to sync across devices',
+                        ),
+                        secondary: const Icon(Icons.cloud),
+                        value: AppMode.cloudSync,
+                        groupValue: selectedMode,
+                        onChanged: (value) {
+                          if (value != null) {
+                            ref.read(appModeProvider.notifier).state = value;
+                            // If not signed in, show login dialog
+                            if (!isSignedIn) {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Sign In Required'),
+                                  content: const Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'To use Cloud Sync, you need to sign in with your account.',
+                                      ),
+                                      SizedBox(height: 16),
+                                      LoginForm(),
+                                    ],
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () {
+                                        // Switch back to local only
+                                        ref.read(appModeProvider.notifier).state =
+                                            AppMode.localOnly;
+                                        Navigator.of(context).pop();
+                                      },
+                                      child: const Text('Cancel'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      if (selectedMode == AppMode.localOnly && !isSignedIn)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.secondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Your data is stored only on this device',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (selectedMode == AppMode.cloudSync && isSignedIn)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.cloud_done,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Your data is automatically synced to the cloud',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
             const Divider(),
           ],
