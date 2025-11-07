@@ -24,13 +24,6 @@ class GoogleCalendarService {
     }
 
     try {
-      // Create start of day DateTime
-      final startDate = DateTime(
-        task.dueDate.year,
-        task.dueDate.month,
-        task.dueDate.day,
-      );
-
       // Create a Google Calendar event from the task
       final event = calendar.Event();
       event.summary = task.text;
@@ -45,12 +38,27 @@ class GoogleCalendarService {
         event.description = (event.description ?? '') + tagsString;
       }
 
-      // Set as all-day event using dateTime
+      // Set event times
       event.start = calendar.EventDateTime();
-      event.start!.dateTime = startDate;
-
       event.end = calendar.EventDateTime();
-      event.end!.dateTime = startDate.add(const Duration(hours: 1));
+
+      if (task.eventStartTime != null && task.eventEndTime != null) {
+        // Event has specific start and end times
+        event.start!.dateTime = task.eventStartTime!.toUtc();
+        event.end!.dateTime = task.eventEndTime!.toUtc();
+        // Set timezone
+        event.start!.timeZone = DateTime.now().timeZoneName;
+        event.end!.timeZone = DateTime.now().timeZoneName;
+      } else {
+        // All-day event - create start of day DateTime
+        final startDate = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        event.start!.dateTime = startDate;
+        event.end!.dateTime = startDate.add(const Duration(hours: 1));
+      }
 
       // Add to primary calendar
       final createdEvent = await _calendarApi!.events.insert(event, 'primary');
@@ -69,13 +77,6 @@ class GoogleCalendarService {
     }
 
     try {
-      // Create start of day DateTime
-      final startDate = DateTime(
-        task.dueDate.year,
-        task.dueDate.month,
-        task.dueDate.day,
-      );
-
       // Create updated event
       final event = calendar.Event();
       event.summary = task.text;
@@ -90,12 +91,27 @@ class GoogleCalendarService {
         event.description = (event.description ?? '') + tagsString;
       }
 
-      // Set as all-day event
+      // Set event times
       event.start = calendar.EventDateTime();
-      event.start!.dateTime = startDate;
-
       event.end = calendar.EventDateTime();
-      event.end!.dateTime = startDate.add(const Duration(hours: 1));
+
+      if (task.eventStartTime != null && task.eventEndTime != null) {
+        // Event has specific start and end times
+        event.start!.dateTime = task.eventStartTime!.toUtc();
+        event.end!.dateTime = task.eventEndTime!.toUtc();
+        // Set timezone
+        event.start!.timeZone = DateTime.now().timeZoneName;
+        event.end!.timeZone = DateTime.now().timeZoneName;
+      } else {
+        // All-day event - create start of day DateTime
+        final startDate = DateTime(
+          task.dueDate.year,
+          task.dueDate.month,
+          task.dueDate.day,
+        );
+        event.start!.dateTime = startDate;
+        event.end!.dateTime = startDate.add(const Duration(hours: 1));
+      }
 
       // Update the event
       await _calendarApi!.events.update(event, 'primary', eventId);

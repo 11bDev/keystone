@@ -39,7 +39,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
   }
 
   String _getProjectTag() {
-    return '-${widget.project.name.toLowerCase().replaceAll(' ', '')}';
+    return '@${widget.project.name.toLowerCase().replaceAll(' ', '')}';
   }
 
   List<Task> _getProjectTasks(List<Task> allTasks) {
@@ -73,7 +73,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
       appBar: AppBar(
         title: Text(widget.project.name),
         actions: const [
-          AppNavigationActions(),
+          AppNavigationActions(currentRoute: '/project-detail'),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -768,6 +768,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
     );
     DateTime? dueDate = task?.dueDate ?? DateTime.now();
     String category = task?.category ?? 'task';
+    TimeOfDay? startTime = task?.eventStartTime != null 
+        ? TimeOfDay.fromDateTime(task!.eventStartTime!)
+        : null;
+    TimeOfDay? endTime = task?.eventEndTime != null
+        ? TimeOfDay.fromDateTime(task!.eventEndTime!)
+        : null;
 
     showDialog(
       context: context,
@@ -825,8 +831,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                             TextField(
                               controller: tagsController,
                               decoration: const InputDecoration(
-                                labelText: 'Tags (e.g. #work -myproject)',
-                                hintText: 'Use # for tags, - for projects',
+                                labelText: 'Tags (e.g. #work @myproject)',
+                                hintText: 'Use # for tags, @ for projects',
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -881,6 +887,56 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                 ),
                               ],
                             ),
+                            if (category == 'event') ...[
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  const Text('Start Time: '),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final selectedTime = await showTimePicker(
+                                        context: context,
+                                        initialTime: startTime ?? TimeOfDay.now(),
+                                      );
+                                      if (selectedTime != null) {
+                                        setState(() {
+                                          startTime = selectedTime;
+                                        });
+                                      }
+                                    },
+                                    child: Text(
+                                      startTime != null
+                                          ? startTime!.format(context)
+                                          : 'Select Time',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Text('End Time: '),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final selectedTime = await showTimePicker(
+                                        context: context,
+                                        initialTime: endTime ?? (startTime ?? TimeOfDay.now()),
+                                      );
+                                      if (selectedTime != null) {
+                                        setState(() {
+                                          endTime = selectedTime;
+                                        });
+                                      }
+                                    },
+                                    child: Text(
+                                      endTime != null
+                                          ? endTime!.format(context)
+                                          : 'Select Time',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -899,6 +955,30 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                             if (controller.text.isNotEmpty) {
                               final taskService = ref.read(taskServiceProvider);
                               if (taskService != null) {
+                                // Convert TimeOfDay to DateTime if times are selected
+                                DateTime? eventStartTime;
+                                DateTime? eventEndTime;
+                                
+                                if (category == 'event' && startTime != null && dueDate != null) {
+                                  eventStartTime = DateTime(
+                                    dueDate!.year,
+                                    dueDate!.month,
+                                    dueDate!.day,
+                                    startTime!.hour,
+                                    startTime!.minute,
+                                  );
+                                }
+                                
+                                if (category == 'event' && endTime != null && dueDate != null) {
+                                  eventEndTime = DateTime(
+                                    dueDate!.year,
+                                    dueDate!.month,
+                                    dueDate!.day,
+                                    endTime!.hour,
+                                    endTime!.minute,
+                                  );
+                                }
+                                
                                 if (task == null) {
                                   await taskService.addTask(
                                     controller.text,
@@ -908,6 +988,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                     note: noteController.text.isEmpty
                                         ? null
                                         : noteController.text,
+                                    eventStartTime: eventStartTime,
+                                    eventEndTime: eventEndTime,
                                   );
                                 } else {
                                   await taskService.updateTask(
@@ -919,6 +1001,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                                     note: noteController.text.isEmpty
                                         ? null
                                         : noteController.text,
+                                    eventStartTime: eventStartTime,
+                                    eventEndTime: eventEndTime,
                                   );
                                 }
                                 Navigator.pop(context);
@@ -994,8 +1078,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                         TextField(
                           controller: tagsController,
                           decoration: const InputDecoration(
-                            labelText: 'Tags (e.g. #work -myproject)',
-                            hintText: 'Use # for tags, - for projects',
+                            labelText: 'Tags (e.g. #work @myproject)',
+                            hintText: 'Use # for tags, @ for projects',
                           ),
                         ),
                       ],
@@ -1095,8 +1179,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen>
                         TextField(
                           controller: tagsController,
                           decoration: const InputDecoration(
-                            labelText: 'Tags (e.g. #work -myproject)',
-                            hintText: 'Use # for tags, - for projects',
+                            labelText: 'Tags (e.g. #work @myproject)',
+                            hintText: 'Use # for tags, @ for projects',
                           ),
                         ),
                       ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:keystone/features/journal/journal_detail_screen.dart';
 import 'package:keystone/models/journal_entry.dart';
@@ -202,33 +201,12 @@ class _JournalTabState extends ConsumerState<JournalTab> {
                         ),
                         const SizedBox(height: 16),
                         TextField(
-                          controller: tagsController,
-                          decoration: const InputDecoration(
-                            labelText: 'Tags (e.g. #work -myproject)',
-                            hintText: 'Use # for tags, - for projects',
-                            border: OutlineInputBorder(),
+                            controller: tagsController,
+                            decoration: const InputDecoration(
+                              labelText: 'Tags (e.g. #work @myproject)',
+                              hintText: 'Use # for tags, @ for projects',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final picker = ImagePicker();
-                            final pickedFile = await picker.pickImage(
-                              source: ImageSource.gallery,
-                            );
-                            if (pickedFile != null && entry != null && entry.id != null) {
-                              final journalService = ref.read(journalServiceProvider);
-                              if (journalService != null) {
-                                await journalService.addImageToJournalEntry(
-                                  entry.id!,
-                                  pickedFile.path,
-                                );
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.image),
-                          label: const Text('Insert Picture'),
-                        ),
                       ],
                     ),
                   ),

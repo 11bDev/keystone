@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/features/auth/login_form.dart';
 import 'package:keystone/features/auth/mode_selection_screen.dart';
+import 'package:keystone/features/help/help_screen.dart';
 import 'package:keystone/providers/auth_provider.dart';
+import 'package:keystone/providers/encryption_provider.dart';
+import 'package:keystone/providers/settings_provider.dart';
 import 'package:keystone/providers/theme_provider.dart';
+import 'package:keystone/services/encryption_service.dart';
 import 'package:keystone/widgets/app_navigation_actions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -270,6 +274,92 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const Divider(),
           ],
+          // Google Calendar Sync Section
+          if (kIsWeb) ...[
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Google Calendar',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Builder(
+              builder: (context) {
+                final authState = ref.watch(authStateChangesProvider);
+                final isSignedIn = authState.maybeWhen(
+                  data: (user) => user != null,
+                  orElse: () => false,
+                );
+                final syncEnabled = ref.watch(googleCalendarSyncProvider);
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        title: const Text('Sync Events to Google Calendar'),
+                        subtitle: Text(
+                          isSignedIn
+                              ? 'Automatically sync your events to Google Calendar'
+                              : 'Sign in with Google to enable calendar sync',
+                        ),
+                        secondary: const Icon(Icons.calendar_today),
+                        value: syncEnabled && isSignedIn,
+                        onChanged: isSignedIn
+                            ? (value) {
+                                ref
+                                    .read(googleCalendarSyncProvider.notifier)
+                                    .setEnabled(value);
+                                if (value) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Events will now sync to Google Calendar',
+                                      ),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              }
+                            : null,
+                      ),
+                      if (syncEnabled && isSignedIn)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'New and updated events will be synced to your Google Calendar',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+          ],
+          // Privacy & Encryption Section
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Privacy & Encryption',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const _EncryptionSettingsCard(),
+          const Divider(),
           // Theme Selection
           const Padding(
             padding: EdgeInsets.all(16.0),
@@ -518,7 +608,273 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Help & Documentation'),
+              subtitle: const Text('Learn how to use Keystone'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const HelpScreen()),
+                );
+              },
+            ),
+          ),
           ListTile(title: const Text('Version'), subtitle: Text(_version)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Encryption Settings Card Widget
+class _EncryptionSettingsCard extends ConsumerWidget {
+  const _EncryptionSettingsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final encryptionEnabled = ref.watch(encryptionEnabledProvider);
+    final encryptionService = ref.watch(encryptionServiceProvider);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('End-to-End Encryption'),
+            subtitle: Text(
+              encryptionEnabled
+                  ? '🔒 Your data is encrypted on this device'
+                  : '⚠️ Data is stored in plain text',
+            ),
+            secondary: Icon(
+              encryptionEnabled ? Icons.lock : Icons.lock_open,
+              color: encryptionEnabled ? Colors.green : Colors.orange,
+            ),
+            value: encryptionEnabled,
+            onChanged: (value) async {
+              if (value) {
+                // Enabling encryption
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Enable Encryption?'),
+                    content: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('This will encrypt all your data before syncing to the cloud.'),
+                        SizedBox(height: 16),
+                        Text('Benefits:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('• Complete privacy - even Google cannot read your data'),
+                        Text('• Your encryption key stays on your device'),
+                        Text('• Zero-knowledge architecture'),
+                        SizedBox(height: 16),
+                        Text('Important:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('• Backup your encryption key in case you lose your device'),
+                        Text('• You can export it from the encryption settings'),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Enable Encryption'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true && context.mounted) {
+                  try {
+                    await ref.read(encryptionEnabledProvider.notifier).enableEncryption();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ Encryption enabled! Future syncs will be encrypted.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error enabling encryption: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                }
+              } else {
+                // Disabling encryption
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Disable Encryption?'),
+                    content: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('⚠️ Warning: This will disable encryption for future syncs.'),
+                        SizedBox(height: 16),
+                        Text('Your previously encrypted cloud data will become unreadable!'),
+                        SizedBox(height: 16),
+                        Text('Are you sure you want to continue?'),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text('Disable Encryption'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true && context.mounted) {
+                  try {
+                    await ref.read(encryptionEnabledProvider.notifier).disableEncryption();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Encryption disabled'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error disabling encryption: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                }
+              }
+            },
+          ),
+          if (encryptionEnabled) ...[
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.vpn_key),
+              title: const Text('Export Encryption Key'),
+              subtitle: const Text('Backup your key to restore data on another device'),
+              trailing: const Icon(Icons.download),
+              onTap: () async {
+                try {
+                  final key = await encryptionService.exportEncryptionKey();
+                  if (key != null && context.mounted) {
+                    await showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Encryption Key'),
+                        content: SelectableText(
+                          key,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error exporting key: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Encryption Info'),
+              subtitle: const Text('Learn about how your data is protected'),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('🔒 End-to-End Encryption'),
+                    content: const SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'How It Works:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 8),
+                          Text('• All data is encrypted on YOUR device before syncing'),
+                          Text('• Uses AES-256 encryption (military-grade)'),
+                          Text('• Your encryption key never leaves your device'),
+                          Text('• Google/Firebase can only see encrypted gibberish'),
+                          SizedBox(height: 16),
+                          Text(
+                            'What Is Encrypted:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 8),
+                          Text('• Task titles and notes'),
+                          Text('• Note titles and content'),
+                          Text('• Journal entries'),
+                          Text('• All tags and project names'),
+                          SizedBox(height: 16),
+                          Text(
+                            'What Is NOT Encrypted:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 8),
+                          Text('• Dates and timestamps (needed for syncing)'),
+                          Text('• Task status (pending/done/cancelled)'),
+                          Text('• Data structure metadata'),
+                          SizedBox(height: 16),
+                          Text(
+                            'Important:',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                          ),
+                          SizedBox(height: 8),
+                          Text('⚠️ Export and save your encryption key!'),
+                          Text('⚠️ If you lose your device and key, your data is unrecoverable'),
+                          Text('✅ Keep your key in a password manager or secure location'),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Got It'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
         ],
       ),
     );

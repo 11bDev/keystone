@@ -248,8 +248,8 @@ class _NotesTabState extends ConsumerState<NotesTab> {
                         TextField(
                           controller: tagsController,
                           decoration: const InputDecoration(
-                            labelText: 'Tags (e.g. #work -myproject)',
-                            hintText: 'Use # for tags, - for projects',
+                            labelText: 'Tags (e.g. #work @myproject)',
+                            hintText: 'Use # for tags, @ for projects',
                             border: OutlineInputBorder(),
                           ),
                         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/features/auth/login_form.dart';
+import 'package:keystone/features/help/help_screen.dart';
 import 'package:keystone/providers/auth_provider.dart';
 
 class LandingPage extends ConsumerWidget {
@@ -12,6 +13,21 @@ class LandingPage extends ConsumerWidget {
       body: Stack(
         children: [
           _buildBackground(context),
+          // Help button in top-right corner
+          Positioned(
+            top: 16,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.help_outline),
+              tooltip: 'Help & Documentation',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const HelpScreen()),
+                );
+              },
+              iconSize: 28,
+            ),
+          ),
           Center(
             child: SingleChildScrollView(
               child: Padding(
@@ -25,6 +41,8 @@ class LandingPage extends ConsumerWidget {
                     _buildFeatures(context),
                     const SizedBox(height: 64),
                     _buildGetStartedButton(context, ref),
+                    const SizedBox(height: 24),
+                    _buildHelpLink(context),
                   ],
                 ),
               ),
@@ -135,6 +153,18 @@ class LandingPage extends ConsumerWidget {
         );
       },
       child: const Text('Get Started'),
+    );
+  }
+
+  Widget _buildHelpLink(BuildContext context) {
+    return TextButton.icon(
+      icon: const Icon(Icons.help_outline),
+      label: const Text('View Help & Documentation'),
+      onPressed: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const HelpScreen()),
+        );
+      },
     );
   }
 }

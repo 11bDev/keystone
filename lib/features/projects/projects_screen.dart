@@ -278,7 +278,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Tag items with -projectname to link them',
+                    'Tag items with @projectname to link them',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.outline,

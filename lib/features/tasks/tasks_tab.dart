@@ -727,6 +727,12 @@ class _TasksTabState extends ConsumerState<TasksTab> {
     );
     DateTime? dueDate = task?.dueDate ?? DateTime.now();
     String category = task?.category ?? 'task'; // Default to 'task'
+    TimeOfDay? startTime = task?.eventStartTime != null 
+        ? TimeOfDay.fromDateTime(task!.eventStartTime!)
+        : null;
+    TimeOfDay? endTime = task?.eventEndTime != null
+        ? TimeOfDay.fromDateTime(task!.eventEndTime!)
+        : null;
 
     showDialog(
       context: context,
@@ -784,8 +790,8 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                             TextField(
                               controller: tagsController,
                               decoration: const InputDecoration(
-                                labelText: 'Tags (e.g. #work -myproject)',
-                                hintText: 'Use # for tags, - for projects',
+                                labelText: 'Tags (e.g. #work @myproject)',
+                                hintText: 'Use # for tags, @ for projects',
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -840,6 +846,56 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                 ),
                               ],
                             ),
+                            if (category == 'event') ...[
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  const Text('Start Time: '),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final selectedTime = await showTimePicker(
+                                        context: context,
+                                        initialTime: startTime ?? TimeOfDay.now(),
+                                      );
+                                      if (selectedTime != null) {
+                                        setState(() {
+                                          startTime = selectedTime;
+                                        });
+                                      }
+                                    },
+                                    child: Text(
+                                      startTime != null
+                                          ? startTime!.format(context)
+                                          : 'Select Time',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Text('End Time: '),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final selectedTime = await showTimePicker(
+                                        context: context,
+                                        initialTime: endTime ?? (startTime ?? TimeOfDay.now()),
+                                      );
+                                      if (selectedTime != null) {
+                                        setState(() {
+                                          endTime = selectedTime;
+                                        });
+                                      }
+                                    },
+                                    child: Text(
+                                      endTime != null
+                                          ? endTime!.format(context)
+                                          : 'Select Time',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -858,6 +914,30 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                             if (controller.text.isNotEmpty) {
                               final taskService = ref.read(taskServiceProvider);
                               if (taskService != null) {
+                                // Convert TimeOfDay to DateTime if times are selected
+                                DateTime? eventStartTime;
+                                DateTime? eventEndTime;
+                                
+                                if (category == 'event' && startTime != null && dueDate != null) {
+                                  eventStartTime = DateTime(
+                                    dueDate!.year,
+                                    dueDate!.month,
+                                    dueDate!.day,
+                                    startTime!.hour,
+                                    startTime!.minute,
+                                  );
+                                }
+                                
+                                if (category == 'event' && endTime != null && dueDate != null) {
+                                  eventEndTime = DateTime(
+                                    dueDate!.year,
+                                    dueDate!.month,
+                                    dueDate!.day,
+                                    endTime!.hour,
+                                    endTime!.minute,
+                                  );
+                                }
+                                
                                 if (task == null) {
                                   // Adding new task
                                   await taskService.addTask(
@@ -868,6 +948,8 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                     note: noteController.text.isEmpty
                                         ? null
                                         : noteController.text,
+                                    eventStartTime: eventStartTime,
+                                    eventEndTime: eventEndTime,
                                   );
                                 } else {
                                   // Updating existing task
@@ -880,6 +962,8 @@ class _TasksTabState extends ConsumerState<TasksTab> {
                                     note: noteController.text.isEmpty
                                         ? null
                                         : noteController.text,
+                                    eventStartTime: eventStartTime,
+                                    eventEndTime: eventEndTime,
                                   );
                                 }
                                 Navigator.pop(context);

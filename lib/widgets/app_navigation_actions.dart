@@ -20,6 +20,20 @@ class AppNavigationActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Show Home button on Calendar, Lists, Projects, Search, Settings, and detail pages
+        if (currentRoute == '/calendar' || 
+            currentRoute == '/lists' ||
+            currentRoute == '/projects' || 
+            currentRoute == '/search' || 
+            currentRoute == '/settings' ||
+            currentRoute == '/project-detail')
+          IconButton(
+            icon: const Icon(Icons.home),
+            tooltip: 'Home',
+            onPressed: () {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
+          ),
         if (currentRoute != '/calendar')
           IconButton(
             icon: const Icon(Icons.calendar_today),

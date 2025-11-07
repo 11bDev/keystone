@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keystone/models/task.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:keystone/services/google_calendar_service.dart';
+import 'package:keystone/providers/settings_provider.dart';
+import 'package:keystone/providers/auth_provider.dart';
 
 // Provider for Firestore instance
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
@@ -41,8 +44,16 @@ final taskListProvider = StreamProvider<List<Task>>((ref) {
 class TaskService {
   final FirebaseFirestore _firestore;
   final String _userId;
+  final GoogleCalendarService? _calendarService;
+  final bool _syncEnabled;
 
-  TaskService(this._firestore, this._userId);
+  TaskService(
+    this._firestore,
+    this._userId, {
+    GoogleCalendarService? calendarService,
+    bool syncEnabled = false,
+  })  : _calendarService = calendarService,
+        _syncEnabled = syncEnabled;
 
   CollectionReference<Map<String, dynamic>> get _tasksCollection =>
       _firestore.collection('users').doc(_userId).collection('tasks');
@@ -53,17 +64,37 @@ class TaskService {
     DateTime? dueDate,
     String category = 'task',
     String? note,
+    DateTime? eventStartTime,
+    DateTime? eventEndTime,
   }) async {
     final task = Task()
       ..text = text
       ..dueDate = dueDate ?? DateTime.now()
-      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? []
+      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('@')).toList() ?? []
       ..category = category
       ..note = note
       ..status = 'pending'
+      ..eventStartTime = eventStartTime
+      ..eventEndTime = eventEndTime
       ..lastModified = DateTime.now();
 
-    await _tasksCollection.add(task.toFirestore());
+    // Add to Firestore
+    final docRef = await _tasksCollection.add(task.toFirestore());
+    task.id = docRef.id;
+
+    // Sync to Google Calendar if enabled and it's an event
+    if (_syncEnabled &&
+        category == 'event' &&
+        _calendarService != null &&
+        _calendarService!.isInitialized) {
+      final eventId = await _calendarService!.addEventToCalendar(task);
+      if (eventId != null) {
+        // Update task with Google Calendar event ID
+        await _tasksCollection.doc(docRef.id).update({
+          'googleCalendarEventId': eventId,
+        });
+      }
+    }
   }
 
   Future<void> addTaskObject(Task task) async {
@@ -86,10 +117,12 @@ class TaskService {
     DateTime? dueDate,
     String? category,
     String? note,
+    DateTime? eventStartTime,
+    DateTime? eventEndTime,
   }) async {
     final updateData = <String, dynamic>{
       'text': newText,
-      'tags': newTags.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList(),
+      'tags': newTags.split(' ').where((t) => t.startsWith('#') || t.startsWith('@')).toList(),
       'lastModified': FieldValue.serverTimestamp(),
     };
     
@@ -102,8 +135,46 @@ class TaskService {
     if (note != null) {
       updateData['note'] = note;
     }
+    if (eventStartTime != null) {
+      updateData['eventStartTime'] = Timestamp.fromDate(eventStartTime);
+    } else {
+      updateData['eventStartTime'] = null;
+    }
+    if (eventEndTime != null) {
+      updateData['eventEndTime'] = Timestamp.fromDate(eventEndTime);
+    } else {
+      updateData['eventEndTime'] = null;
+    }
 
     await _tasksCollection.doc(taskId).update(updateData);
+
+    // Sync to Google Calendar if enabled and it's an event
+    if (_syncEnabled &&
+        category == 'event' &&
+        _calendarService != null &&
+        _calendarService!.isInitialized) {
+      // Get the task to check if it already has a calendar event
+      final taskDoc = await _tasksCollection.doc(taskId).get();
+      if (taskDoc.exists) {
+        final task = Task.fromFirestore(taskDoc);
+        
+        if (task.googleCalendarEventId != null) {
+          // Update existing event
+          await _calendarService!.updateEventInCalendar(
+            task.googleCalendarEventId!,
+            task,
+          );
+        } else {
+          // Create new event
+          final eventId = await _calendarService!.addEventToCalendar(task);
+          if (eventId != null) {
+            await _tasksCollection.doc(taskId).update({
+              'googleCalendarEventId': eventId,
+            });
+          }
+        }
+      }
+    }
   }
 
   Future<void> migrateTask(String taskId, DateTime newDueDate) async {
@@ -148,6 +219,17 @@ class TaskService {
   }
 
   Future<void> deleteTask(String taskId) async {
+    // Get the task first to check for Google Calendar event
+    if (_syncEnabled && _calendarService != null && _calendarService!.isInitialized) {
+      final taskDoc = await _tasksCollection.doc(taskId).get();
+      if (taskDoc.exists) {
+        final task = Task.fromFirestore(taskDoc);
+        if (task.googleCalendarEventId != null) {
+          await _calendarService!.deleteEventFromCalendar(task.googleCalendarEventId!);
+        }
+      }
+    }
+    
     await _tasksCollection.doc(taskId).delete();
   }
 }
@@ -156,9 +238,18 @@ class TaskService {
 final taskServiceProvider = Provider<TaskService?>((ref) {
   final firestore = ref.watch(firestoreProvider);
   final userAsync = ref.watch(currentUserProvider);
+  final calendarService = ref.watch(googleCalendarServiceProvider);
+  final syncEnabled = ref.watch(googleCalendarSyncProvider);
   
   return userAsync.when(
-    data: (user) => user != null ? TaskService(firestore, user.uid) : null,
+    data: (user) => user != null
+        ? TaskService(
+            firestore,
+            user.uid,
+            calendarService: calendarService,
+            syncEnabled: syncEnabled,
+          )
+        : null,
     loading: () => null,
     error: (_, __) => null,
   );

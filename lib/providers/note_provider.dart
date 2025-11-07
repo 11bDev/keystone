@@ -52,7 +52,7 @@ class NoteService {
       ..content = content
       ..creationDate = DateTime.now()
       ..optionalTitle = title
-      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? []
+      ..tags = tags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('@')).toList() ?? []
       ..lastModified = DateTime.now();
 
     await _notesCollection.add(note.toFirestore());
@@ -67,7 +67,7 @@ class NoteService {
     await _notesCollection.doc(noteId).update({
       'content': newContent,
       'optionalTitle': newTitle,
-      'tags': newTags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('-')).toList() ?? [],
+      'tags': newTags?.split(' ').where((t) => t.startsWith('#') || t.startsWith('@')).toList() ?? [],
       'lastModified': FieldValue.serverTimestamp(),
     });
   }

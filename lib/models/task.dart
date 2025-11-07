@@ -19,6 +19,11 @@ class Task {
 
   DateTime? lastModified; // Local timestamp for conflict resolution
 
+  // Event time fields (only used when category is 'event')
+  DateTime? eventStartTime; // Start time for events (includes date and time)
+
+  DateTime? eventEndTime; // End time for events (includes date and time)
+
   /// Create Task from Firestore document
   static Task fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
@@ -33,6 +38,12 @@ class Task {
     task.googleCalendarEventId = data['googleCalendarEventId'] as String?;
     task.lastModified = data['lastModified'] != null 
         ? (data['lastModified'] as Timestamp).toDate()
+        : null;
+    task.eventStartTime = data['eventStartTime'] != null
+        ? (data['eventStartTime'] as Timestamp).toDate()
+        : null;
+    task.eventEndTime = data['eventEndTime'] != null
+        ? (data['eventEndTime'] as Timestamp).toDate()
         : null;
     return task;
   }
@@ -50,6 +61,12 @@ class Task {
       'lastModified': lastModified != null 
           ? Timestamp.fromDate(lastModified!)
           : FieldValue.serverTimestamp(),
+      'eventStartTime': eventStartTime != null
+          ? Timestamp.fromDate(eventStartTime!)
+          : null,
+      'eventEndTime': eventEndTime != null
+          ? Timestamp.fromDate(eventEndTime!)
+          : null,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
